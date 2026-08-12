@@ -1041,12 +1041,22 @@ class StripRenderer:
         return s
 
     def _draw_weather(self, img, draw, x: int, weather: Dict,
-                      font, row_h: int, when=None) -> int:
+                      font, row_h: int, when=None,
+                      show_forecast: bool = True) -> int:
         """Weather: now, the next few hours, then the next few days.
 
         An active warning displaces the place name and takes the alert colour.
         A severe thunderstorm warning is the only thing on this board more
         urgent than a live score.
+
+        show_forecast controls the hourly/5-day columns and the moon phase
+        only -- current conditions always draw regardless, on the same
+        reasoning as the warning above: whatever's happening right now
+        outside stays visible even while a live game hides everything else
+        competing for the strip. Off by default from the caller's side
+        (weather.hide_forecast_when_live in config, opt-in per install) --
+        the original design kept the whole block up during a live game on
+        purpose, and this only overrides that for whoever turns it on.
         """
         if not weather:
             return 0
@@ -1123,7 +1133,7 @@ class StripRenderer:
 
         # --- next hours ---------------------------------------------------
         hourly = [h for h in (weather.get("hourly") or []) if h.get("temp") is not None]
-        if hourly:
+        if show_forecast and hourly:
             x += self._draw_divider(img, draw, x)
             draw.text((x, self._text_top(draw, font, self.MARGIN)),
                       "NEXT HOURS", font=font, fill=self.DIM)
@@ -1136,7 +1146,7 @@ class StripRenderer:
 
         # --- next days ----------------------------------------------------
         daily = [d for d in (weather.get("daily") or []) if d.get("temp") is not None]
-        if daily:
+        if show_forecast and daily:
             x += self._draw_divider(img, draw, x)
             draw.text((x, self._text_top(draw, font, self.MARGIN)),
                       "5 DAY FORECAST", font=font, fill=self.DIM)
@@ -1148,7 +1158,7 @@ class StripRenderer:
             x = max(x + self._measure(draw, "5 DAY FORECAST", font)[0], column) + 4
 
         # --- moon -----------------------------------------------------------
-        if when is not None:
+        if show_forecast and when is not None:
             x += self._draw_divider(img, draw, x)
             phase = moon_phase.phase_info(when)
 
@@ -1543,7 +1553,7 @@ class StripRenderer:
     def build_strip(self, teams_and_games, start_labels=None, leaderboards=None,
                     weather=None, clock=None, awards=None,
                     other_live=None, team_mvps=None, countdowns=None,
-                    streaks=None):
+                    streaks=None, weather_show_forecast=True):
         """One continuous strip across every team.
 
         A single image rather than one per team: the board then scrolls
@@ -1572,6 +1582,7 @@ class StripRenderer:
                 (weather or {}).get("next_temp"),
                 (weather or {}).get("now_condition"),
                 tuple(a.get("event", "") for a in (weather or {}).get("alerts", [])),
+                bool(weather_show_forecast),
             ),
             tuple(
                 sorted((k, v.get("name", ""), v.get("short_name", ""),
@@ -1609,6 +1620,7 @@ class StripRenderer:
             strip = self._compose_strip(
                 teams_and_games, start_labels, leaderboards, weather, clock,
                 awards, other_live, team_mvps, countdowns, streaks,
+                weather_show_forecast,
             )
             self._strip_key = signature
             self._strip_cache = strip
@@ -1627,14 +1639,15 @@ class StripRenderer:
             self._dispatch_background_build(
                 signature, teams_and_games, start_labels, leaderboards,
                 weather, clock, awards, other_live, team_mvps, countdowns,
-                streaks,
+                streaks, weather_show_forecast,
             )
         return self._strip_cache
 
     def _dispatch_background_build(self, signature, teams_and_games,
                                     start_labels, leaderboards, weather,
                                     clock, awards, other_live, team_mvps,
-                                    countdowns, streaks) -> None:
+                                    countdowns, streaks,
+                                    weather_show_forecast=True) -> None:
         """Compose the next strip off the render thread, so the scroll
         never waits on it -- only the finished image, swapped in at
         adopt_pending()'s next seam, is ever shared back with the caller.
@@ -1647,6 +1660,7 @@ class StripRenderer:
                 strip = self._compose_strip(
                     teams_and_games, start_labels, leaderboards, weather,
                     clock, awards, other_live, team_mvps, countdowns, streaks,
+                    weather_show_forecast,
                 )
             except Exception:
                 self.logger.error(
@@ -1682,7 +1696,8 @@ class StripRenderer:
 
     def _compose_strip(self, teams_and_games, start_labels, leaderboards,
                        weather, clock, awards, other_live, team_mvps,
-                       countdowns, streaks) -> Image.Image:
+                       countdowns, streaks,
+                       weather_show_forecast: bool = True) -> Image.Image:
         """The actual drawing work -- tens of milliseconds, hundreds on a
         Pi. Safe to run off the main thread: everything it touches is
         either local to this call (the scratch canvas, its font) or the
@@ -1727,7 +1742,7 @@ class StripRenderer:
 
         if weather:
             added = self._draw_weather(scratch, draw, x, weather, font, row_h,
-                                       clock)
+                                       clock, show_forecast=weather_show_forecast)
             if added:
                 x += added
                 x += self._draw_divider(scratch, draw, x)

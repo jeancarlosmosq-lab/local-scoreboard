@@ -32,7 +32,9 @@ Status is colour-coded — green in progress, amber upcoming, grey final, orange
 
 Ahead of the teams: current conditions and an hourly and 5-day forecast from the US National Weather Service (free, keyless), a clock, the moon's current phase, and days-until for any personal dates you configure — a birthday, a holiday, first day of school. Each countdown gets an icon guessed from its own name (a cake for a birthday, a tree for Christmas, a pencil for school, a star otherwise), and reads "TODAY!" on the day itself.
 
-A live game — any live game, not just a followed team's — hides the season leaderboards, award watch lists and countdowns entirely, since a live score is what the board exists to show right now and everything else competing for the same scroll only pushes it further away. They come back automatically the moment nothing is live; the underlying data keeps refreshing in the background the whole time, so there's no delay when they reappear.
+A live game — any live game, not just a followed team's — hides the season leaderboards, award watch lists and countdowns entirely, since a live score is what the board exists to show right now and everything else competing for the same scroll only pushes it further away. They come back automatically the moment nothing is live; the underlying data keeps refreshing in the background the whole time, so there's no delay when they reappear. This takes effect immediately, not on the strip's next full lap -- a live game starting or ending forces the newly rebuilt strip in right away rather than waiting for the scroll to finish its current pass, which on a long strip could otherwise be minutes away.
+
+Weather's current conditions stay up regardless -- the same reasoning that leads the whole strip with weather in the first place, a warning is more urgent than a live score. The moon phase and hourly/5-day forecast columns follow the same hiding rule as leaderboards, but only if `weather.hide_forecast_when_live` is turned on; it defaults to off, so installs that don't set it keep the original always-shown behaviour.
 
 When nothing is live, the leftmost module shows this same clock-and-weather block on its own, pinned in place while the rest of the strip scrolls past — the same slot a live game takes over automatically the moment there is one.
 
@@ -114,4 +116,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.38.0
+0.39.0

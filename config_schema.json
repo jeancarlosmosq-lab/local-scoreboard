@@ -50,6 +50,12 @@
           "description": "Fifteen minutes is ample; observations update hourly and forecasts less often.",
           "default": 900,
           "minimum": 300
+        },
+        "hide_forecast_when_live": {
+          "type": "boolean",
+          "title": "Hide Moon and Forecast While Any Game Is Live",
+          "description": "Off by default -- the moon phase and hourly/5-day forecast columns stay up during a live game the same as always. Turning this on hides those two (current conditions still show, on the same reasoning that keeps a warning visible) whenever any game is live, the same trigger that already hides leaderboards, award watch lists and countdowns.",
+          "default": false
         }
       }
     },

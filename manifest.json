@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -21,6 +21,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.39.0",
+      "released": "2026-08-12",
+      "notes": "Two fixes to the live-game hiding behavior. (1) A live game starting or ending now adopts its rebuilt strip immediately instead of waiting for the current scroll pass to finish -- on a long strip that could previously be minutes away, during which leaderboards, award watch lists and countdowns stayed visible after they should have hidden (or stayed hidden after they should have come back). (2) New optional weather.hide_forecast_when_live setting (default off): when turned on, the moon phase and hourly/5-day forecast columns also hide while any game is live, the same trigger as leaderboards/awards/countdowns. Current conditions are unaffected either way -- a weather warning stays visible on the same reasoning that already exempted it."
+    },
     {
       "version": "0.38.0",
       "released": "2026-08-12",

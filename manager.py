@@ -118,6 +118,17 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self._scroll_offset = 0.0
         self._scroll_key = None
         self._scroll_last_ts = 0.0
+        # Whether leaderboards/awards/countdowns were hidden as of the last
+        # frame. adopt_pending() normally only swaps in a rebuilt strip at
+        # the scroll seam, once per full pass -- fine for cosmetic changes,
+        # but a live game starting mid-pass means the old strip (still
+        # showing everything that should now be hidden) can keep scrolling
+        # for minutes on a long strip before the hide actually appears.
+        # Tracking the transition lets a live-state change force an
+        # out-of-turn adopt the moment the rebuild is ready, instead of
+        # waiting for the lap to finish.
+        self._last_any_live = None
+        self._urgent_adopt = False
         # Leaderboard and award segments are rebuilt on a timer, not per
         # frame; the data behind them refetches every few hours.
         self._boards_cache = None
@@ -192,6 +203,15 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self.teams_weather_label = weather_cfg.get("label", "BAYONNE")
         self.teams_weather_units = weather_cfg.get("units", "F")
         self.teams_weather_interval = float(weather_cfg.get("interval", 900))
+        # Off by default -- the original design keeps the whole weather
+        # block up during a live game on purpose (a warning is more urgent
+        # than a live score). This only hides the moon phase and forecast
+        # columns, current conditions stay up regardless, and only for
+        # whoever turns it on; installs that don't set this keep today's
+        # behavior unchanged.
+        self.teams_weather_hide_forecast_when_live = bool(
+            weather_cfg.get("hide_forecast_when_live", False)
+        )
 
         # A fixed panel for one team's live game, on the leftmost module.
         panel_cfg = self.config.get("static_panel", {})
@@ -321,6 +341,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self.teams_weather_label = ""
         self.teams_weather_units = "F"
         self.teams_weather_interval = 900.0
+        self.teams_weather_hide_forecast_when_live = False
         self.teams_panel_on = False
         self.teams_panel_team = "NYY"
         self.teams_panel_priority = []
@@ -777,10 +798,16 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         # has_live(): a live game from outside the followed teams is still
         # a live game competing for the same attention.
         any_live = self.games.has_any_live()
+        if self._last_any_live is not None and any_live != self._last_any_live:
+            self._urgent_adopt = True
+        self._last_any_live = any_live
         boards, awards = self._leaderboards()
         countdown_events = self._countdowns()
         if any_live:
             boards, awards, countdown_events = [], [], []
+        weather_show_forecast = not (
+            any_live and self.teams_weather_hide_forecast_when_live
+        )
         other_live = (
             self.games.other_live_games(self.teams_other_live_limit)
             if self.teams_other_live_on else []
@@ -794,6 +821,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             team_mvps=self._team_mvps(),
             countdowns=countdown_events,
             streaks=streaks,
+            weather_show_forecast=weather_show_forecast,
         )
         if built is None:
             return False
@@ -812,13 +840,26 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self._scroll_last_ts = now
         self._scroll_offset += elapsed * self.teams_scroll_speed
 
-        if span and self._scroll_offset >= span:
+        reached_seam = bool(span and self._scroll_offset >= span)
+        if reached_seam:
             # A full pass. Wrap rather than stop -- the strip is continuous.
             self._scroll_offset -= span
             self._seen.setdefault(MODE_TEAMS, set()).add("pass")
-            # The seam is the only moment nothing is mid-view, so a rebuilt
-            # strip is adopted here rather than the instant the data changed.
+
+        # The seam is normally the only moment nothing is mid-view, so a
+        # rebuilt strip is adopted there rather than the instant the data
+        # changed -- swapping mid-pass shifts every segment after the
+        # changed one sideways, which reads as a glitch for an ordinary
+        # score update. A live game starting or every live game ending is
+        # different: it's what leaderboards/awards/countdowns hiding or
+        # reappearing hinges on, and on a long strip the current pass can
+        # take minutes, during which the board keeps showing content that
+        # should already be gone (or stays hidden after it should be back).
+        # That transition jumps the queue -- adopted the moment the
+        # rebuild is ready, seam or not.
+        if reached_seam or self._urgent_adopt:
             if self.strip.adopt_pending():
+                self._urgent_adopt = False
                 built = self.strip.build_strip(
                     teams_and_games, labels, leaderboards=boards, awards=awards,
                     weather=self._weather_data,
@@ -827,9 +868,13 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                     team_mvps=self._team_mvps(),
                     countdowns=countdown_events,
                     streaks=streaks,
+                    weather_show_forecast=weather_show_forecast,
                 )
                 self._scroll_offset = 0.0
-                self.logger.debug("Adopted rebuilt strip at the seam")
+                self.logger.debug(
+                    "Adopted rebuilt strip at the seam" if reached_seam else
+                    "Adopted rebuilt strip immediately for a live-state change"
+                )
 
         # Repaint just the clock box; recomposing the strip for a minute
         # change would cost hundreds of milliseconds.
@@ -858,6 +903,9 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             countdown_events = self._countdowns()
             if any_live:
                 boards, awards, countdown_events = [], [], []
+            weather_show_forecast = not (
+                any_live and self.teams_weather_hide_forecast_when_live
+            )
             other_live = (
                 self.games.other_live_games(self.teams_other_live_limit)
                 if self.teams_other_live_on else []
@@ -869,7 +917,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 other_live=other_live,
                 team_mvps=self._team_mvps(),
                 countdowns=countdown_events,
-                streaks=self._streaks()) if pairs else None)
+                streaks=self._streaks(),
+                weather_show_forecast=weather_show_forecast) if pairs else None)
             if built is None:
                 return None
             speed = max(1.0, self.teams_scroll_speed)

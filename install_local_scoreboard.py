@@ -89,6 +89,7 @@ DEFAULT_ENTRY = {
         "longitude": -74.1143,
         "units": "F",
         "interval": 900,
+        "hide_forecast_when_live": False,
     },
     "leaderboards": {
         "enabled": True,

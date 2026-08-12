@@ -2484,6 +2484,41 @@ def main():
     print(f"PASS  weather segment grows a MOON section only when a date is "
           f"passed ({without_w}px -> {with_w}px), within the shared margin")
 
+    # show_forecast=False (weather.hide_forecast_when_live, opted into per
+    # install) drops the hourly/5-day columns and the moon phase, but
+    # current conditions -- the "now" temperature -- must still draw, on
+    # the same reasoning that already keeps a weather warning up during a
+    # live game.
+    forecast_weather = dict(moon_weather, hourly=[{"name": "8P", "temp": 77}],
+                            daily=[{"name": "MON", "temp": 80}])
+    shown_img = Image.new("RGB", (250, 32), (0, 0, 0))
+    shown_draw = _MoonID.Draw(shown_img)
+    shown_w = rmoonw._draw_weather(
+        shown_img, shown_draw, 2, forecast_weather, moon_font, moon_row_h,
+        _dt(2026, 8, 12), show_forecast=True)
+
+    hidden_img = Image.new("RGB", (250, 32), (0, 0, 0))
+    hidden_draw = _MoonID.Draw(hidden_img)
+    hidden_w = rmoonw._draw_weather(
+        hidden_img, hidden_draw, 2, forecast_weather, moon_font, moon_row_h,
+        _dt(2026, 8, 12), show_forecast=False)
+    assert hidden_w < shown_w, (
+        f"show_forecast=False should drop the forecast/moon columns: "
+        f"shown={shown_w}px, hidden={hidden_w}px"
+    )
+    now_only_w = rmoonw._draw_weather(
+        Image.new("RGB", (250, 32), (0, 0, 0)), _MoonID.Draw(
+            Image.new("RGB", (250, 32), (0, 0, 0))),
+        2, forecast_weather, moon_font, moon_row_h, None, show_forecast=False)
+    assert hidden_w == now_only_w, (
+        "show_forecast=False with hourly/daily/moon data present should "
+        "measure the same as never having passed them at all -- current "
+        f"conditions only: {hidden_w}px vs {now_only_w}px"
+    )
+    print(f"PASS  show_forecast=False hides the moon phase and forecast "
+          f"columns but keeps current conditions up ({shown_w}px -> "
+          f"{hidden_w}px)")
+
     # Countdown: pure date arithmetic, recurring every year. Must roll over
     # to next year once this year's date has passed, and must not crash on
     # a Feb 29 configured against a non-leap year.
@@ -3131,6 +3166,149 @@ def main():
     print(f"PASS  countdowns are also hidden from the strip while a game "
           f"is live ({cd_not_live_width}px -> {cd_live_width}px), and "
           f"shown again once nothing is")
+
+    # weather.hide_forecast_when_live: off by default, so an install that
+    # never sets it keeps the original behavior (weather stays up, live or
+    # not) even while everything else hides.
+    wf_off_plugin = LocalScoreboardPlugin(
+        "local-scoreboard", {"teams": [{"abbr": "NYY", "league": "mlb", "name": "Yankees"}]},
+        FakeDisplay(192, 32), FakeCache(), None,
+    )
+    wf_off_plugin.games = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"}])
+    wf_off_plugin.teams_panel_on = False
+    wf_off_plugin._weather_data = {
+        "now_temp": 75, "units": "F", "now_condition": "Clear",
+        "hourly": [{"name": "8P", "temp": 77}],
+    }
+    assert wf_off_plugin.teams_weather_hide_forecast_when_live is False, (
+        "hide_forecast_when_live must default to off"
+    )
+    wf_off_plugin.games._games = [{
+        "id": "wfl1", "league": "mlb", "state": STATE_LIVE, "start": "",
+        "home": {"abbr": "NYY", "score": "3"}, "away": {"abbr": "BOS", "score": "2"},
+        "situation": {"kind": "baseball", "balls": 1, "strikes": 1, "outs": 0},
+        "leaders": [],
+    }]
+    orig_build_wf = wf_off_plugin.strip.build_strip
+    wf_calls = []
+    wf_off_plugin.strip.build_strip = lambda *a, **k: (
+        wf_calls.append(k.get("weather_show_forecast")), orig_build_wf(*a, **k))[1]
+    assert wf_off_plugin._display_strip(), "weather-toggle-off strip failed to draw"
+    assert wf_calls[-1] is True, (
+        f"with hide_forecast_when_live off, weather_show_forecast must "
+        f"stay True even while live: {wf_calls}"
+    )
+    print("PASS  weather.hide_forecast_when_live defaults to off -- "
+          "weather (including forecast) stays up during a live game "
+          "unless explicitly opted in")
+
+    # Opted in (hide_forecast_when_live: true), the forecast/moon columns
+    # follow the same any_live gate as leaderboards/awards/countdowns, but
+    # current conditions are untouched -- the weather block itself is
+    # never passed as empty, only the flag controlling its own forecast
+    # section changes.
+    wf_on_plugin = LocalScoreboardPlugin(
+        "local-scoreboard",
+        {"teams": [{"abbr": "NYY", "league": "mlb", "name": "Yankees"}],
+         "weather": {"hide_forecast_when_live": True}},
+        FakeDisplay(192, 32), FakeCache(), None,
+    )
+    wf_on_plugin.games = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"}])
+    wf_on_plugin.teams_panel_on = False
+    wf_on_plugin._weather_data = {
+        "now_temp": 75, "units": "F", "now_condition": "Clear",
+        "hourly": [{"name": "8P", "temp": 77}],
+    }
+    assert wf_on_plugin.teams_weather_hide_forecast_when_live is True
+    wf_on_plugin.games._games = [{
+        "id": "wfl2", "league": "mlb", "state": STATE_LIVE, "start": "",
+        "home": {"abbr": "NYY", "score": "3"}, "away": {"abbr": "BOS", "score": "2"},
+        "situation": {"kind": "baseball", "balls": 1, "strikes": 1, "outs": 0},
+        "leaders": [],
+    }]
+    orig_build_wf2 = wf_on_plugin.strip.build_strip
+    wf2_calls = []
+    wf_on_plugin.strip.build_strip = lambda *a, **k: (
+        wf2_calls.append(k.get("weather_show_forecast")), orig_build_wf2(*a, **k))[1]
+    assert wf_on_plugin._display_strip(), "weather-toggle-on strip failed to draw"
+    assert wf2_calls[-1] is False, (
+        f"with hide_forecast_when_live on and a game live, "
+        f"weather_show_forecast must be False: {wf2_calls}"
+    )
+    assert wf_on_plugin.strip._strip_cache.width > 0, (
+        "current conditions should still draw something even with the "
+        "forecast hidden"
+    )
+    print("PASS  weather.hide_forecast_when_live=true hides the forecast/"
+          "moon columns while any game is live, current conditions "
+          "unaffected")
+
+    # A live-state change must not have to wait for the scroll to complete
+    # a full pass before the hide/reveal actually appears -- adopt_pending()
+    # normally only runs at the seam, but on a long strip that could be
+    # minutes away. Confirms the transition is adopted as soon as the
+    # rebuild is ready, well before the scroll has gone anywhere near the
+    # seam.
+    urgent_plugin = LocalScoreboardPlugin(
+        "local-scoreboard", {"teams": [{"abbr": "NYY", "league": "mlb", "name": "Yankees"}]},
+        FakeDisplay(192, 32), FakeCache(), None,
+    )
+    urgent_plugin.games = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"}])
+    urgent_plugin.teams_panel_on = False
+    urgent_plugin._leaderboards = lambda: (
+        [("AL HR LEADERS", lb_rows, "HR")], [("AL MVP WATCH", lb_rows)])
+    urgent_plugin.teams_leaderboards_on = True
+    urgent_plugin.games._games = [{
+        "id": "urg1", "league": "mlb", "state": STATE_UPCOMING, "start": "",
+        "home": {"abbr": "NYY", "score": ""}, "away": {"abbr": "BOS", "score": ""},
+        "situation": {}, "leaders": [],
+    }]
+    assert urgent_plugin._display_strip(), "urgent-adopt baseline strip failed to draw"
+    urgent_not_live_width = urgent_plugin.strip._strip_cache.width
+    assert urgent_plugin._last_any_live is False
+    assert urgent_plugin._urgent_adopt is False, (
+        "the very first build must not itself count as a live-state "
+        "transition"
+    )
+
+    urgent_plugin.games._games = [{
+        "id": "urg2", "league": "mlb", "state": STATE_LIVE, "start": "",
+        "home": {"abbr": "NYY", "score": "3"}, "away": {"abbr": "BOS", "score": "2"},
+        "situation": {"kind": "baseball", "balls": 0, "strikes": 0, "outs": 0},
+        "leaders": [],
+    }]
+    urgent_plugin.strip._last_build = 0.0
+    assert urgent_plugin._display_strip(), "urgent-adopt trigger frame failed to draw"
+    assert urgent_plugin._urgent_adopt is True, (
+        "a live-state flip must be flagged for an out-of-turn adopt"
+    )
+    scroll_offset_before_adopt = urgent_plugin._scroll_offset
+    assert urgent_plugin.strip._wait_for_background_build(), (
+        "background rebuild for the live-state change did not finish"
+    )
+    assert urgent_plugin._display_strip(), "urgent-adopt follow-up frame failed to draw"
+    urgent_live_width = urgent_plugin.strip._strip_cache.width
+
+    assert urgent_live_width < urgent_not_live_width, (
+        f"the live strip should be narrower (leaderboards/awards hidden): "
+        f"not_live={urgent_not_live_width}px, live={urgent_live_width}px"
+    )
+    assert urgent_plugin._urgent_adopt is False, (
+        "the out-of-turn adopt should clear the flag once it succeeds"
+    )
+    assert scroll_offset_before_adopt < urgent_not_live_width * 0.2, (
+        "this check only proves anything if the scroll was still early in "
+        f"its pass, nowhere near the seam: offset was "
+        f"{scroll_offset_before_adopt}px against a "
+        f"{urgent_not_live_width}px strip"
+    )
+    print(f"PASS  a live-state change adopts its rebuilt strip immediately "
+          f"instead of waiting for the scroll to complete a full pass "
+          f"({urgent_not_live_width}px -> {urgent_live_width}px, "
+          f"{scroll_offset_before_adopt:.1f}px into the pass)")
 
     # ---- 6. Plugin lifecycle -------------------------------------------
     plugin_display = FakeDisplay(192, 32)
