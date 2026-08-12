@@ -1,0 +1,409 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Local Scoreboard",
+  "description": "Scores and schedules for a set of followed teams, fully configurable to any city, teams and leagues",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "default": true
+    },
+    "weather": {
+      "type": "object",
+      "title": "Weather",
+      "description": "Current conditions, tonight's outlook and any active warnings, from the US National Weather Service. Free and keyless -- the same data the commercial services resell. Weather leads the strip: a warning is the one thing here more urgent than a live score.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Show Weather",
+          "default": true
+        },
+        "label": {
+          "type": "string",
+          "title": "Place Name",
+          "description": "Shown above the temperature. Left empty, the nearest city name from the forecast office is used.",
+          "default": "BAYONNE"
+        },
+        "latitude": {
+          "type": "number",
+          "title": "Latitude",
+          "default": 40.6687
+        },
+        "longitude": {
+          "type": "number",
+          "title": "Longitude",
+          "default": -74.1143
+        },
+        "units": {
+          "type": "string",
+          "title": "Units",
+          "enum": [
+            "F",
+            "C"
+          ],
+          "default": "F"
+        },
+        "interval": {
+          "type": "number",
+          "title": "Refresh (seconds)",
+          "description": "Fifteen minutes is ample; observations update hourly and forecasts less often.",
+          "default": 900,
+          "minimum": 300
+        }
+      }
+    },
+    "other_live_games": {
+      "type": "object",
+      "title": "Other Live Games",
+      "description": "Live games elsewhere -- across MLB, NBA and NFL -- that do not involve a followed team. Shown only while they are actually live; a final or a fixture for an unfollowed team never appears here.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Show Other Live Games",
+          "default": true
+        },
+        "limit": {
+          "type": "integer",
+          "title": "Maximum Games Shown",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 15
+        }
+      }
+    },
+    "countdowns": {
+      "type": "object",
+      "title": "Countdowns",
+      "description": "Days until a recurring annual date -- a birthday, a holiday -- shown on the strip right after the weather. Computed by plain date arithmetic, no network involved.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Show Countdowns",
+          "default": true
+        },
+        "events": {
+          "type": "array",
+          "title": "Dates",
+          "description": "Each entry recurs every year on the same month and day.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "title": "Label",
+                "description": "Shown as \"12 DAYS TO <label>\"."
+              },
+              "month": {
+                "type": "integer",
+                "title": "Month",
+                "minimum": 1,
+                "maximum": 12
+              },
+              "day": {
+                "type": "integer",
+                "title": "Day",
+                "minimum": 1,
+                "maximum": 31
+              }
+            }
+          },
+          "default": []
+        },
+        "limit": {
+          "type": "integer",
+          "title": "Maximum Shown",
+          "description": "The soonest this many, if more are configured.",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10
+        }
+      }
+    },
+    "layout": {
+      "type": "string",
+      "title": "Layout",
+      "description": "Strip scrolls one team at a time with everything about that team on a single pass: a full-height logo, any live game with its situation, finals, fixtures and standout performances. Cards shows one game at a time instead.",
+      "enum": [
+        "strip",
+        "cards"
+      ],
+      "default": "strip"
+    },
+    "scroll_speed": {
+      "type": "number",
+      "title": "Scroll Speed (pixels/second)",
+      "description": "Strip layout only. Lower is slower and easier to read.",
+      "default": 22,
+      "minimum": 4,
+      "maximum": 120
+    },
+    "static_panel": {
+      "type": "object",
+      "title": "Fixed Live Panel",
+      "description": "Pins one team's live game to the leftmost module while everything else scrolls past it. A game you care about should not scroll away mid-at-bat.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Enabled",
+          "default": true
+        },
+        "width": {
+          "type": "integer",
+          "title": "Panel Width (pixels)",
+          "description": "One 64px module by default.",
+          "default": 64,
+          "minimum": 32,
+          "maximum": 96
+        },
+        "priority": {
+          "type": "array",
+          "title": "Priority Order",
+          "description": "Which team's live game takes the module when several are playing at once. First match wins; if none are playing the module is released and everything scrolls.",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "NYY",
+            "NYM",
+            "NYK",
+            "BKN",
+            "NYG"
+          ]
+        },
+        "alternate": {
+          "type": "number",
+          "title": "Alternate Bottom Row (seconds)",
+          "description": "The last row swaps between the situation and the players involved, because sixty-four pixels will not hold both at once.",
+          "default": 5,
+          "minimum": 2,
+          "maximum": 30
+        }
+      }
+    },
+    "leaderboards": {
+      "type": "object",
+      "title": "League Leaderboards",
+      "description": "Season leaders ride on the same strip as the scores, so one board shows both without the rotation handing between two plugins.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Show Leaderboards",
+          "default": true
+        },
+        "categories": {
+          "type": "array",
+          "title": "Categories",
+          "description": "Shown in this order, after the teams.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "battingAverage",
+              "hits",
+              "homeRuns",
+              "runsBattedIn",
+              "runs",
+              "stolenBases",
+              "wins",
+              "earnedRunAverage",
+              "strikeouts"
+            ]
+          },
+          "default": [
+            "homeRuns",
+            "battingAverage",
+            "earnedRunAverage"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "title": "League Split",
+          "description": "Per league by default: an AL home run race and an NL one are different stories, and merging them hides both.",
+          "enum": [
+            "al_nl",
+            "mlb",
+            "al",
+            "nl"
+          ],
+          "default": "al_nl"
+        },
+        "depth": {
+          "type": "integer",
+          "title": "Players Per Category",
+          "description": "Three fits a segment: a title over three ranked rows.",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 5
+        },
+        "cache_duration": {
+          "type": "number",
+          "title": "Leader Cache (seconds)",
+          "description": "Season totals move slowly; six hours is plenty.",
+          "default": 21600,
+          "minimum": 600
+        },
+        "awards": {
+          "type": "array",
+          "title": "Award Watch Lists",
+          "description": "Computed from the leaderboards with a weighted points system. Not predictions or betting odds.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "mvp",
+              "cy_young",
+              "roy",
+              "triple_crown"
+            ]
+          },
+          "default": [
+            "mvp",
+            "cy_young",
+            "roy",
+            "triple_crown"
+          ]
+        }
+      }
+    },
+    "teams": {
+      "type": "array",
+      "title": "Teams To Follow",
+      "description": "Each entry needs an ESPN abbreviation and a league. Common alternate spellings are matched automatically, so NYK and NY both find the Knicks.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "abbr": {
+            "type": "string",
+            "title": "ESPN Abbreviation"
+          },
+          "league": {
+            "type": "string",
+            "enum": [
+              "mlb",
+              "nba",
+              "nfl"
+            ],
+            "title": "League"
+          },
+          "name": {
+            "type": "string",
+            "title": "Label"
+          },
+          "rivals": {
+            "type": "array",
+            "title": "Rivals",
+            "description": "ESPN abbreviations that flag a game as a rivalry -- coloured and labelled differently on the strip regardless of whether it is live, final, or upcoming.",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          }
+        }
+      },
+      "default": [
+        {
+          "abbr": "NYY",
+          "league": "mlb",
+          "name": "Yankees",
+          "rivals": ["BOS", "NYM"]
+        },
+        {
+          "abbr": "NYM",
+          "league": "mlb",
+          "name": "Mets",
+          "rivals": ["ATL", "PHI", "NYY"]
+        },
+        {
+          "abbr": "BKN",
+          "league": "nba",
+          "name": "Nets",
+          "rivals": ["NYK"]
+        },
+        {
+          "abbr": "NYK",
+          "league": "nba",
+          "name": "Knicks",
+          "rivals": ["BOS", "BKN"]
+        },
+        {
+          "abbr": "NYG",
+          "league": "nfl",
+          "name": "Giants",
+          "rivals": ["DAL", "PHI"]
+        }
+      ]
+    },
+    "game_duration": {
+      "type": "number",
+      "title": "Seconds Per Game",
+      "default": 12,
+      "minimum": 3,
+      "maximum": 120
+    },
+    "max_display_duration": {
+      "type": "number",
+      "title": "Max Seconds Per Visit",
+      "description": "Longest this plugin holds the panel before handing back. It resumes at the next game on its following turn.",
+      "default": 60,
+      "minimum": 10,
+      "maximum": 600
+    },
+    "live_interval": {
+      "type": "number",
+      "title": "Refresh While Live (seconds)",
+      "description": "How often to refetch while a followed team is playing -- balls, strikes and score change every few seconds, so this stays far below the idle cadence.",
+      "default": 5,
+      "minimum": 3,
+      "maximum": 30
+    },
+    "idle_interval": {
+      "type": "number",
+      "title": "Refresh When Idle (seconds)",
+      "description": "How often to check for a live game starting up when nothing is currently in progress.",
+      "default": 60,
+      "minimum": 15
+    },
+    "upcoming_limit": {
+      "type": "integer",
+      "title": "Upcoming Games To Show",
+      "default": 5,
+      "minimum": 1,
+      "maximum": 20
+    },
+    "leaders_per_game": {
+      "type": "integer",
+      "title": "Notable Players Per Game",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 4
+    },
+    "display_duration": {
+      "type": "number",
+      "title": "Display Duration (seconds)",
+      "default": 30
+    },
+    "customization": {
+      "type": "object",
+      "title": "Appearance",
+      "properties": {
+        "card": {
+          "type": "object",
+          "title": "Game Card",
+          "properties": {
+            "show_logos": {
+              "type": "boolean",
+              "title": "Show Team Logos",
+              "default": true
+            },
+            "show_leaders": {
+              "type": "boolean",
+              "title": "Show Notable Player",
+              "description": "A line under the score with the game's standout performer and their stat line. Needs a wide panel.",
+              "default": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

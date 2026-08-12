@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.DS_Store
+.claude/
+
+# Team crest logos are downloaded on demand from ESPN at runtime and
+# cached here -- not something to ship or redistribute in the repo.
+logos/
+
+# Diagnostic renders are throwaway verification images.
+diag_*.png
+nyc_cards.png

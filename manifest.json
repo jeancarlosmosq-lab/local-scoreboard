@@ -1,0 +1,340 @@
+{
+  "id": "local-scoreboard",
+  "name": "Local Scoreboard",
+  "version": "0.37.0",
+  "author": "jeancarlosmosq-lab",
+  "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
+  "category": "sports",
+  "tags": [
+    "sports",
+    "scores",
+    "mlb",
+    "nba",
+    "nfl",
+    "scoreboard",
+    "weather",
+    "customizable"
+  ],
+  "display_modes": [
+    "local_scoreboard"
+  ],
+  "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
+  "branch": "main",
+  "versions": [
+    {
+      "version": "0.37.0",
+      "released": "2026-08-12",
+      "notes": "Three fixes. (1) Games elsewhere in the league are now interleaved one at a time after each followed team, instead of bunched into a single block at the very end of the strip -- on a long roster that block could be most of a lap away, so live scores from other teams now surface throughout the scroll instead of only once per pass. (2) An off-season team's far-future opener (found via the rare wide lookup) is cached the moment it's found but only added to the scroll within 5 days of its start, instead of appearing the moment it's discovered, sometimes months out. (3) The hourly and 5-day forecast icon is now vertically centered in the gap between its label and its temperature -- it was previously pinned immediately under the label with all the slack dumped below it, the same top-anchoring bug this codebase has fixed everywhere else."
+    },
+    {
+      "version": "0.36.0",
+      "released": "2026-08-12",
+      "notes": "Renamed from 'NYC Teams' (id nyc-teams) to 'Local Scoreboard' (id local-scoreboard), for a public release meant to run for any city, teams and leagues rather than just this one household's. No functional change -- the plugin class (NYCTeamsPlugin -> LocalScoreboardPlugin), its scroll-mode id (nyc_teams -> local_scoreboard) and the card-layout mode ids (nyc_live/nyc_recent/nyc_upcoming -> local_live/local_recent/local_upcoming) are renamed to match, but every setting, default and behavior is unchanged. Existing installs need their config.json entry moved from the old 'nyc-teams' key to the new 'local-scoreboard' key -- the install script handles this automatically. Also now published to its own repository (github.com/jeancarlosmosq-lab/local-scoreboard) rather than living inside a private household setup."
+    },
+    {
+      "version": "0.35.1",
+      "released": "2026-08-12",
+      "notes": "0.35.0's leaderboard/award hiding only checked has_live() -- a followed team's own live game. Widened to has_any_live() (new on GamesManager), which also counts a live game around the league that has nothing to do with a followed team: a live score is what the board exists to show right now regardless of whose game it is, and season stats competing for the same scroll is the same problem either way."
+    },
+    {
+      "version": "0.35.0",
+      "released": "2026-08-12",
+      "notes": "Two changes. The weather segment's 'NEXT HOURS' and '5 DAY FORECAST' headers used to sit at the panel's own top margin using the larger body font, while the forecast columns beneath independently anchored their own smaller-font day/hour label to that same top margin -- header and content competing for the same rows rather than one sitting above the other, which read as uncentered. The columns now start a full row below their own header. Leaderboards and award watch lists are hidden from the strip entirely while any followed team has a live game in progress -- a live score is what the board exists to show right now, and season stats competing for the same scroll only pushed it further away -- and return automatically the moment nothing is live. The underlying computation keeps running and its cache stays warm the whole time, so there is no cold-cache delay when they reappear."
+    },
+    {
+      "version": "0.34.0",
+      "released": "2026-08-12",
+      "notes": "The strip's rebuild -- tens of milliseconds, hundreds on a Pi -- now runs on a background thread instead of in-line on the render path. Confirmed live: at 0.33.0's new 125 FPS scroll loop, a rebuild that slow relative to the ~8ms frame budget read as the board freezing for a moment, roughly every live_interval while a game was live -- the same rebuild cost that was always there, just far more visible once the frame budget got that tight. The first-ever build (nothing cached yet, nothing to keep showing meanwhile) stays synchronous; every rebuild after that composes off-thread and is swapped in at the next scroll seam exactly as before, just without blocking the frame it happened to land on. A background compose that raises is caught and logged rather than crashing the render loop or leaving the renderer wedged for the next real change."
+    },
+    {
+      "version": "0.33.0",
+      "released": "2026-08-12",
+      "notes": "The strip layout now explicitly declares needs_high_fps, read directly by the display controller ahead of its own enable_scrolling fallback heuristic (confirmed live: the plugin had neither attribute, so the controller was running it at its normal cadence rather than the smooth 125 FPS scroll loop). Cards layout, which swaps a static frame in on its own schedule rather than scrolling continuously, explicitly declares it False -- there is no motion there for a higher frame rate to smooth out."
+    },
+    {
+      "version": "0.32.0",
+      "released": "2026-08-12",
+      "notes": "Countdowns get an icon, guessed from the event's own name and drawn from primitives -- a cake for a birthday, a tree for Christmas, a pencil for school, a gold star for anything else. There is no fixed list of event types to look up an icon for, since the name is free text someone typed in, so the icon is inferred from a keyword match rather than fetched or configured separately."
+    },
+    {
+      "version": "0.31.3",
+      "released": "2026-08-12",
+      "notes": "live_interval's default tightened from 7s to 5s, matching what was actually asked for: once a live game is identified, its score refreshes every 5 seconds. idle_interval (60s, checking whether anything has gone live yet) is unchanged."
+    },
+    {
+      "version": "0.31.2",
+      "released": "2026-08-12",
+      "notes": "Every section-to-section transition on the strip (teams to other-live, to leaderboards, to awards, and the wrap-seam close) was drawing two dividers back to back -- one trailing the section that just ended, one leading the section about to start -- marking the same single boundary twice. Down to one divider per boundary throughout, the same rule already used between two items inside one section (game to game, category to category). Also drops the 10px 'breath' that only ran between teams and nowhere else on the strip, which was its own inconsistency: every other boundary got a plain divider with no extra gap, so teams now get the same treatment as everything else instead of a wider gap only they had."
+    },
+    {
+      "version": "0.31.1",
+      "released": "2026-08-12",
+      "notes": "Dividers unified to one style everywhere. There used to be two: a thin dim hairline between individual items, and a taller, brighter gold rule between major sections (weather to teams, teams to other-live, to leaderboards, to awards). Each was internally consistent on its own -- confirmed by scanning a real render pixel by pixel, no actual bug -- but two different treatments mixed across one continuous scroll read as inconsistent rather than as a deliberate hierarchy. Every gap, including the one between the static panel and the scrolling strip, now uses the same hairline. _draw_section_break() and the SECTION_RULE colour are gone."
+    },
+    {
+      "version": "0.31.0",
+      "released": "2026-08-12",
+      "notes": "Two additions to the team banner. A win/loss streak (W3, L2) rides right after the team name, in green or red -- pulled from ESPN's own league standings (confirmed live: it already computes this, flattened out of the standings' division/conference grouping), not tallied from recent finals, since the normal game fetch keeps nowhere near enough history to reconstruct one. Refreshed once every 30 minutes per followed league, independent of the live-game cadence. Rivalry games -- a configured opponent, e.g. Yankees vs Red Sox -- are flagged 'RIVALRY' and recoloured regardless of state (live, final, or upcoming), via a new per-team 'rivals' config list; the five default followed teams ship with the well-known classic matchups already set (Yankees/Red Sox and Yankees/Mets, Mets/Braves and Mets/Phillies, Knicks/Celtics and Knicks/Nets, Giants/Cowboys and Giants/Eagles)."
+    },
+    {
+      "version": "0.30.0",
+      "released": "2026-08-12",
+      "notes": "Adds countdowns to a configured, recurring annual date -- a birthday, a holiday -- shown right after the weather on the scrolling strip as 'N DAYS / TO <NAME>', or 'TODAY!' on the day itself. Plain date arithmetic (countdowns.py, new file) -- no network, no API, nothing that can fail. Empty by default, same as star_players once was: these are personal to whoever is running this board, so nothing is guessed at. Configure under countdowns.events, each entry a name plus a month and day."
+    },
+    {
+      "version": "0.29.0",
+      "released": "2026-08-12",
+      "notes": "Adds the moon phase to the weather segment: an icon (two overlapping discs, the same trick any moon illustration uses) plus the phase name and percent illuminated, right after the 5-day forecast. Computed with plain arithmetic from a known reference new moon -- no API, no network, nothing that can fail or need a key, in keeping with the weather source's own keyless philosophy. Only appears on the scrolling strip's weather segment, not the compact static clock/weather panel, which stays as tight as it already was."
+    },
+    {
+      "version": "0.28.0",
+      "released": "2026-08-12",
+      "notes": "Team headlines are gone -- the whole feature, not just its display: per-team news fetching, star-player relevance ranking, the headline-specific scroll slowdown, and the config that drove all three (news.*, headline_slowdown, each team's star_players). The scroll now runs at one constant configured speed everywhere, with nothing left to compete with a pinned live game for the reader's attention. This is a deliberate, requested removal, not a bug fix -- headline_games() (which final and which upcoming fixture a team's banner shows) is a completely different, unrelated piece of code and is untouched."
+    },
+    {
+      "version": "0.27.1",
+      "released": "2026-08-12",
+      "notes": "0.27.0's fast refresh only kicked in for whichever game was specifically pinned to the static panel -- generalized to any followed team's live game, matching what was actually asked for: check for a live game every idle_interval (60s, was 900s) when nothing is happening, and once any followed team is live, drop to live_interval (7s, was 45s) so balls, strikes and score stay current everywhere on the board, not only in the one pinned slot. The separate static_panel.refresh_interval setting from 0.27.0 is gone -- idle_interval/live_interval now cover exactly the same ground on their own, one pair of knobs instead of two. update_interval is also gone: it duplicated idle_interval's old role and had no purpose left once the games-refresh gate stopped needing a second, disconnected timer."
+    },
+    {
+      "version": "0.27.0",
+      "released": "2026-08-12",
+      "notes": "0.26.3's crest fix stopped the bleed but did not go far enough: the bases diamond was still sharing the bottom row with the count and outs, and its own geometry (the two bottom markers sit lower than the top one) ran past the panel's bottom edge no matter how the origin was nudged -- there was simply not enough of an 8px row left for it. The diamond now lives beside the team names instead, spanning the 16px band those two rows share, which is where the user pointed out it belonged; row 3 is freed up entirely for the count, outs and batter/pitcher name. Balls and strikes looked frozen during an at-bat because the whole board refetched on a 45-60s cadence built for 'is anything live at all' -- a pinned live game now forces a refetch roughly every 7s (configurable, static_panel.refresh_interval), independent of and much faster than every other section's own cadence. Headlines are suppressed on the strip entirely while a live game is actually pinned to the static panel, since a reader watching that game does not need a competing news sentence scrolling past at the same time; they return the moment nothing is pinned. Live and final games both draw their notable-performer note through the same method, so the season-MVP fix from 0.26.0 (show the full name instead of the abbreviation whenever the stat line is already at least as wide) now applies there too, for both game states at once."
+    },
+    {
+      "version": "0.26.3",
+      "released": "2026-08-11",
+      "notes": "The live-game static panel's team crests were 1px taller than their own row (crest_size = row_h + 1, an intentional overshoot for visual weight), which on real hardware (row_h=8) meant each crest bled into the row below it -- the two team crests touched each other, and both crowded the bases/count/outs row beneath them, making the situation graphics hard to make out. Confirmed on the Pi against a real live Yankees game: the two crests visibly merged into one blob. Capped crest_size at row_h itself instead of row_h + 1, so every crest now fits inside its own row with the same row-to-row spacing everything else on this panel already uses. This panel was never tied to the clock/weather panel's width -- it already renders at the full configured static_panel.width (64px) independently -- the crowding was a vertical overlap bug within this panel's own layout, not a sizing conflict between the two."
+    },
+    {
+      "version": "0.26.2",
+      "released": "2026-08-11",
+      "notes": "The 30-minute post-start window added in 0.26.1 reintroduced the same detection lag it fixed, just for delayed games instead of on-time ones -- a rain delay does not move a baseball game's own 'start' field, so a game more than 30 minutes into a delay looked identical to a genuine postponement and fell back to the 15-minute idle timer right as it was about to go live. Widened to 4 hours, generous enough to cover a real delay without it being mistaken for one; a genuine postponement to another day still gets caught once ESPN republishes a new start time."
+    },
+    {
+      "version": "0.26.1",
+      "released": "2026-08-11",
+      "notes": "The refresh timer used to only shorten to its 45s live cadence after a fetch had already noticed a followed team's game was live, which meant a game crossing from upcoming to live near the end of a 15-minute idle check could sit undetected for most of that window -- caught live on the real board, where a Yankees game had started but the strip was still showing the clock and 'upcoming'. The timer now also shortens itself starting 10 minutes before a followed game's own scheduled start, and stays short until either the state catches up to live or the game is well past its start time without one (a delay or postponement, at which point the idle timer is the sane default again). Detection lag for a game going live is now bounded by the update loop's own ~60s tick, not the 15-minute idle interval; the static panel's live-game priority already read this same state directly, so it now switches over within about a minute of first pitch instead of possibly waiting up to 15 minutes, and reverts to the clock/weather panel just as quickly once the game goes final, since that transition is caught on the same short timer while the game is live."
+    },
+    {
+      "version": "0.26.0",
+      "released": "2026-08-11",
+      "notes": "The season MVP note now shows a player's full name instead of the abbreviated one whenever the stat line beside it is already at least as wide -- the block's width is the widest of its three rows, not their sum, so a longer name in that case costs nothing extra and reads better than an abbreviation. Headlines were considered for removal this round and kept as-is; nothing about them changed. The weather panel's forecast header now reads '5 DAY FORECAST' instead of the terser '5 DAY'. Each team's headline segment now carries 'NEWS' next to the team name in its label, distinguishing it at a glance from the season MVP note and note segments that sit beside it. Broadcast parsing now collects every channel ESPN lists for a game instead of stopping at the first -- a local/regional feed (YES, SNY) and a national or streaming one (ESPN, FOX, Peacock) can both show at once, joined with '/', rather than only ever displaying whichever happened to be listed first."
+    },
+    {
+      "version": "0.25.1",
+      "released": "2026-08-11",
+      "notes": "Three changes. The clock-and-weather panel now sizes itself to its own content instead of always filling the full 64px module -- centring inside a fixed box only moved the dead space around, it never removed it. The wrap seam -- end of one pass into the start of the next, which begins with the clock -- now carries the same heavier section rule every other section change on the strip gets; the tail already had one, the start never did, which read as a gap rather than a deliberate boundary. Headlines wrap to two lines instead of three: the actual problem was never scroll speed, it was that a whole wrapped sentence is more text than fits in a glance at this width no matter how slowly it passes -- shorter is what buys readability. The slowdown while a headline is on screen (0.25.0) stays in place alongside this, since a shorter headline read at a slightly gentler pace is strictly easier than either change alone."
+    },
+    {
+      "version": "0.25.0",
+      "released": "2026-08-11",
+      "notes": "The scroll now slows down specifically while a headline is passing through the visible window -- roughly a third of normal speed by default, configurable (headline_slowdown) -- instead of reading a whole sentence at the same pace a score reads in a glance. Everything else on the strip keeps its configured speed; only the headline segments themselves get more time. Cycle-duration estimates (used for rotation scheduling) now account for the extra time this adds to a full pass, so a visit is not cut off early by a duration estimate that assumed the old, uniform speed."
+    },
+    {
+      "version": "0.24.1",
+      "released": "2026-08-11",
+      "notes": "The N was never a colour problem -- that theory was wrong. It was the smaller font's own letterforms, confirmed against real hardware in 'FINAL', a leaderboard's own header, and its ranked rows: none of those read as a standard N no matter what colour drew them. Knicks/Nets/Giants never had the problem because their names were never drawn in that font to begin with. All three spots now use the same standard body font those team names already use -- an unmodified, never-hand-drawn glyph -- instead of chasing a smaller font size that was never worth what it cost. The 4x6 font file's own patched glyph is untouched and still correct where it's still used (the weather forecast's day labels); only these three contexts stopped reaching for that font at all. Leaderboards and award lists are back to 2 visible rows per the same margin math as before, and AL/NL keep their own mark leading the list, with the 'AL'/'NL' text restored in the header alongside it. Complete stat lines on every row are reverted -- a row shows the one category it's ranked by again, plain 'HR 35' rather than the full season line; the season MVP note is unaffected, since that was always a different piece of the board. The clock-and-weather panel's dead space is fixed: every line centres against the panel's own width instead of anchoring left and leaving a lopsided blank run on the right. It still only occupies the slot when nothing is live -- unchanged, a live game still wins outright the moment there is one."
+    },
+    {
+      "version": "0.24.0",
+      "released": "2026-08-11",
+      "notes": "The 'broken N' turned out not to be about the glyph at all: several MLB team colours used for a leaderboard row's abbreviation (Yankees navy chief among them) were too dark to read at a few pixels of text on an unlit panel, and N -- often the eye-catching first letter -- made that most obvious. Confirmed by checking the upstream rpi-rgb-led-matrix font on GitHub: it carries the identical bitmap already patched here, so that fix stands; the actual fix this time is a 175-floor brightness lift on every team colour, the same proportional lift logos already got. Every leaderboard and award row now shows a player's complete stat line (AVG/HR/RBI or ERA/W/K), not just the one category it happens to be ranked by. Adds a real team MVP for every followed team, not just the ones with a player already ranking in a league-wide leaderboard's top N -- which left most teams with no MVP most of the time. A team with no league-wide candidate now gets its own roster fetched (a much bigger, much rarer request, throttled on its own slow cache and only for a team that actually needs it) and ranks its own players against each other, the same weighted-category approach the league-wide awards use. Adds a clock-and-temperature panel to the left module whenever no game is live there -- the same static-panel mechanism already used to pin a live game reserves that slot instead of leaving it empty, so the time is always visible without ever touching the scroll itself; a live game still wins that slot outright the moment there is one."
+    },
+    {
+      "version": "0.23.0",
+      "released": "2026-08-11",
+      "notes": "AL and NL leaderboards and award lists now lead with the league's own mark instead of a text prefix -- confirmed live that ESPN serves one for each, at a different path than a real league's own logo (.../teamlogos/leagues/500/al.png 404s; .../teamlogos/mlb/500/scoreboard/al.png is the real one). The merged 'MLB' scope keeps its text label, since it has no mark of its own here. Also fixes a real, independently confirmed bug: the 4x6 BDF font's own 'N' glyph never lit its rightmost column at all, rendering as a lopsided, ambiguous shape closer to an 'M' -- not a rendering bug in this plugin, a genuine defect in the font file itself (identical to the same font bundled with the underlying rpi-rgb-led-matrix library). Patched the actual bitmap, in both places that file lives, to match the font's own established letterform conventions (verticals at columns 0 and 2, a diagonal accent the way K and X already use theirs) -- fixes every 'N' this font draws, not just the ones this plugin happens to draw. Leaderboard rank 1/2/3 (and the top 3 of every award list) now render gold/silver/bronze, and a row's team abbreviation draws in that team's own primary colour rather than plain white, so a name and its team read as two distinct pieces rather than one flat run of text."
+    },
+    {
+      "version": "0.22.1",
+      "released": "2026-08-11",
+      "notes": "The season MVP note added in 0.22.0 never actually appeared on a real deployment: BaseballLeadersManager was wired fetch_player_stats=False, a leftover from before that note existed, back when a leaderboard row only ever needed rank/name/value and never a full stat line. team_best() still found a real winner every time, but get_player_stats() always returned {} for them, and _team_mvps() silently drops any team with no stat-line fields to show -- so the feature looked finished in code and in the offline test suite (which mocks the leaders manager directly) and was invisible on the actual board. Caught by checking the real, unmocked object live rather than trusting the mocked test. Confirmed live: Cam Schlittler's ERA/W/K line now renders in the Yankees' own block."
+    },
+    {
+      "version": "0.22.0",
+      "released": "2026-08-11",
+      "notes": "Three changes. Headline relevance had a much simpler cause than expected: a live check found a Yankees story mentioning Aaron Judge -- already a configured star name -- sitting at position 20 in ESPN's own feed, behind a run of league-wide roundups (prospect rankings, trade-deadline recaps) published more recently. The matching logic was already correct; the candidate pool was just too small (6) to ever reach it. Widened to 20, ESPN's own apparent cap on this endpoint. Leaderboards and award lists get their third ranked row back without sacrificing anything: rather than capping to what the shared body font's row height allows (2 rows, the 0.20.0 fix), they now prefer a font small enough to hold all three -- confirmed on real hardware, the same trick already used for the forecast column and a live game's status label. Adds a season MVP note for each followed MLB team, right after their games -- their own top scorer this season with a real stat line (AVG/HR/RBI for a hitter, ERA/W/K for a pitcher), built from the same leaderboard data already on the board rather than a new fetch. The honest limit: it can only see a player who already ranks in a fetched category, the same ceiling the league-wide award lists carry, just applied to one team instead of the whole league -- a team whose best player is quietly good across the board but never top-of-category in any single one will not get an entry."
+    },
+    {
+      "version": "0.21.0",
+      "released": "2026-08-11",
+      "notes": "An off-season followed team -- an NBA team in August, months before its opener -- used to vanish from the board entirely: no banner, no headline, nothing, since both are built from 'teams that have a game' and the normal fetch only looks 7 days ahead. A separate, deliberately rare lookup (confirmed live: a 120-day window reaches October's opener from here) now finds and remembers one future fixture for any followed team the normal window comes up empty for, at most once a day per league, so it keeps showing up on every refresh rather than only the one that found it. The normal fetch also now keeps 3 days of history instead of 1 -- headline_games() still only ever shows the single most recent final, so nothing changes on screen, but it gives a team's own recent notable performers a couple of extra days to serve as the headline-ranking signal 0.20.0 added, instead of that game aging out of memory before its own recap article does. Award section reads 'MLB AWARDS WATCH', and each entry drops its own redundant 'WATCH' -- 'AL MVP WATCH' is now 'AL MVP', same for NL -- since the banner already said it once for the whole section. Adds a Triple Crown watch list (AVG, HR, RBI, equal weight, same computed-ranking approach as MVP and Cy Young). The clock's colon is now two small hand-drawn dots sized off the digit's own ink height instead of the font's own colon glyph, which at the clock's larger two-row font was two solid squares nearly as tall as a digit -- confirmed smaller than the font's own glyph by measuring both, not just asserting it looks right."
+    },
+    {
+      "version": "0.20.1",
+      "released": "2026-08-11",
+      "notes": "The new star-name headline signal (0.20.0) was silently getting nothing to work with: every leaderboard row, award-watch row, and game leader carried an empty team field, on live data, across the board. Two different data sources had the identical class of bug -- a leader entry's own 'team' object carries only a numeric id, never the abbreviation this code assumed was sitting right on it. Confirmed by fetching each API live rather than guessing: ESPN's scoreboard leader entries carry {\"team\": {\"id\": \"14\"}} with the abbreviation only on the competition's own competitors, which this now resolves through with no second request; MLB StatsAPI's leader entries carry {\"team\": {\"id\": 117, \"name\": \"Houston Astros\"}} with no abbreviation field at all, resolved with one cached call to its /teams endpoint. With real team abbreviations flowing again, a followed team's headline now actually favours a story about its own current leaders and performers -- Brett Baty's grand slam over Atlanta outranked a generic prospect-rankings roundup as soon as this landed. Both fixtures in the test suite had encoded the same wrong assumption this code did, which is exactly why it shipped unnoticed; they now match the real, live-confirmed shape."
+    },
+    {
+      "version": "0.20.0",
+      "released": "2026-08-11",
+      "notes": "Two fixes, both confirmed on real hardware. Leaderboards and award watch lists were silently dropping their third ranked row: the shared body font is sized to fill 4 rows across the *whole* panel height with nothing held back for the 1px top/bottom margin every other segment respects, and on real hardware that font's row height makes a title-plus-3-rows block exactly as tall as the panel at zero margin -- the only segment on the strip that actually asks for the full 4 rows. Centring had already committed to a 3-row block before the per-row overflow guard silently clipped the last row, so what was left sat high with a dead gap below it: shorter and off-centre next to every other segment on the scroll. The row count now caps to what actually fits before centring runs, so what centres is what draws. Confirmed by diffing real hardware renders before and after, pixel by pixel. Team headlines no longer rank by whatever ESPN's feed listed first, or by a hand-typed roster that goes stale the moment a player is traded: ranking now uses names the plugin has already fetched and verified for itself -- season leaders, award watch entries, each team's own recent notable performers -- with the most recent article as a tie-breaker, so 'breaking' actually means recent rather than just first-in-feed."
+    },
+    {
+      "version": "0.19.4",
+      "released": "2026-08-11",
+      "notes": "Fixes diagnose_render.py itself, which was silently reporting the same image for four different segments. build_strip() caches its output and, by design, refuses to rebuild more than once every 5 seconds -- a real production safeguard, since rebuilding every frame would stall the Pi. The diagnostic called build_strip() four times back to back on one renderer instance to check the leaderboard, awards, clock and weather segments; every call after the first landed inside that 5-second window and silently returned the first call's cached leaderboard image instead of building the new content, with no error and a plausible-looking margin report each time. Caught by a live Pi run: awards, clock and weather all reported an identical width to the leaderboard, and the PNG saved for weather visibly showed leaderboard rows when pulled off the device and looked at directly -- the discipline this file already insists on, which is exactly what caught it. Each segment now gets its own renderer instance so none of them can hit another's throttle. Unrelated to the fix in 0.19.3, which real hardware separately confirmed: diag_forecast_column.png and diag_sun_icon.png build their images by calling the draw methods directly rather than through build_strip(), so neither was affected by this bug, and both showed the forecast icon rendering correctly on real BDF fonts."
+    },
+    {
+      "version": "0.19.3",
+      "released": "2026-08-11",
+      "notes": "Fixes the forecast icon still going missing on real hardware after 0.19.2's fix. That fix depended entirely on finding a font strictly smaller than the shared body font -- confirmed only for the shared font's own metrics (row_h=8, zero leading), never for whether a smaller candidate is actually found on the real device. Reproducing those exact confirmed metrics with the smaller-font search forced to fail (the untested case -- e.g. 4x6.bdf missing or not measurably smaller on the deployed hardware) showed the column still computes only 3px of room for the icon and silently draws nothing, the identical bug 0.19.2 meant to close. The forecast column's icon-to-text gap was a flat 2px on each side -- 4px of pure whitespace -- while every other segment on the strip holds to this project's established 1px margin; narrowing it to match that convention recovers exactly the pixels needed, so the icon now draws even when no smaller font is found at all, rather than the fix's safety net being reachable only in the lucky case. Confirmed by forcing the smaller-font search to fail against the exact metrics a live diagnostic run reported, not just this sandbox's fallback font. test_offline.py's existing device-metrics test only asserted 'something drew,' which passed even with the icon itself silently skipped -- a new test spies on the icon call directly so this can't regress unnoticed a second time."
+    },
+    {
+      "version": "0.19.2",
+      "released": "2026-08-11",
+      "notes": "Fixes the forecast icon going missing on real hardware. A real compiled BDF font reports zero built-in leading and a taller row height than this project's own test fallback font, which left only 3px of room in the forecast column's icon-versus-overlap calculation -- below the 6px safety floor meant to prevent the icon overlapping the temperature, so it silently drew nothing instead of a cramped icon. The label and temperature now use a font strictly smaller than the shared body font, the same fix that earlier gave the team crests their full size, which frees real room for the icon rather than relying on cramped geometry surviving unchanged across whichever font actually loads. Confirmed against the exact metrics reported by a live diagnostic run on real hardware (row_h=8, zero leading), not just this sandbox's fallback font. Headlines now favour a configured star player's story over routine team news -- a wider pool of articles is fetched per team, and if any mention a name in the new 'star_players' list, that story is shown instead of whichever one ESPN ranked first."
+    },
+    {
+      "version": "0.19.1",
+      "released": "2026-08-11",
+      "notes": "The clock is now sized independently of the shared body font, as large as two rows of the available height allow, instead of matching whatever font a four-row leaderboard needed. Building this exposed a real bug in the first attempt: the font-fitting helper returns the first candidate that satisfies a constraint in a fixed preference order, not the largest one that fits, so asking it for a looser two-row constraint kept returning the same font as the stricter four-row one -- a bigger font later in the list was never even tried. A new selection path scans every candidate and keeps the one with the greatest row height that still fits, confirmed against a simulated font set standing in for the real hardware's bigger BDF font, since this sandbox's own fallback fonts top out too small to show the difference on their own. Adds diagnose_weather_fetch.py: diagnose_weather.py already confirmed the raw National Weather Service data is complete and correct, so this runs the plugin's own weather_source.py against live data directly, to localise whether an empty hourly/daily forecast is a parsing bug in that file or a storage bug further downstream."
+    },
+    {
+      "version": "0.19.0",
+      "released": "2026-08-10",
+      "notes": "Five changes. The clock was the one remaining top-anchored holdout from the centering pass -- it used to be properly centred, and an earlier session mistakenly changed it to top-anchor while trying to make it 'consistent' with other segments, which was the wrong kind of consistency. Upcoming games now show their broadcast channel, appended to the date and time; ESPN carries this under two different keys depending on sport, so both are parsed defensively since only the field's existence, not its exact shape, has been confirmed against real data. Headlines are restored with a real sentence of substance under each team's name, using ESPN's description field rather than the shorter punchier headline text, and built with true centering from the start rather than reviving the old top-anchored code that was already sitting unused. A section banner ('MLB SEASON LEADERS', 'MLB AWARD WATCH') now has a divider before its first category, where previously the title ran straight into the content with only a small gap and no line. Also adds diagnose_weather.py: the hourly and five-day forecast were not appearing on real hardware despite the current temperature working, and rather than guess at a fourth fix, this walks the National Weather Service's three-step lookup chain and reports exactly where it is failing."
+    },
+    {
+      "version": "0.18.0",
+      "released": "2026-08-10",
+      "notes": "Fixes the actual centering bug, not just its symptom. Every block on the strip -- leaderboards, awards, the performer note, the section banners, the weather segment -- was top-anchored at the margin rather than truly centred. It looked centred in testing here only because this sandbox's fallback font happens to make the content almost exactly fill the available height; a font with different proportions, like the real BDF fonts on the actual hardware, would leave real slack that top-anchoring dumps entirely at the bottom. Confirmed by forcing five different simulated font sizes through every affected block: before this fix the imbalance ranged from small to a majority of the panel's height, and after it every block holds equal top and bottom margins regardless of which font produced the row height. The weather segment needed a second pass -- its header was fixed at the very top with only the content below it centred in the remaining space, which is the identical top-anchoring mistake one level up; header and content are now centred together as one unit."
+    },
+    {
+      "version": "0.17.1",
+      "released": "2026-08-10",
+      "notes": "Three weather fixes. The sun icon's rays were sized off the same radius as its core, so at small sizes the two blended into one blob that a bitmap grid rendered as a plain diamond -- no rays visible at all; the core and rays now sit a real, separate gap apart. The forecast column's icon and temperature were sized against two independent formulas for the same boundary, which agreed by only a single pixel in testing here and could disagree entirely on a font with different metrics -- the temperature text could draw directly on top of the icon. Both are now measured from one shared anchor, with an explicit fallback to no icon at all rather than risk an overlapping one. 'FL' is spelled out as 'FEELS LIKE' in full, since this is a scrolling strip with no space pressure forcing an abbreviation a viewer has to decode. Also adds a closing section break after the last leaderboard or award item, so that block is bookended going out the same way it is coming in, rather than trailing into blank space before the strip wraps back to the teams."
+    },
+    {
+      "version": "0.17.0",
+      "released": "2026-08-10",
+      "notes": "Final and upcoming game crests are now genuinely close to full size, not just larger than before. The score moved beside the crest instead of stacked underneath it -- the same relationship the team banner already had between its logo and the team name -- which frees the vertical space that three stacked rows (status, crest, score) had been splitting three ways. A crest now reaches roughly three-quarters of the banner's own logo size, up from about a third; the remaining gap is the one row the status label still needs, which the banner's logo never had to compete with. Getting there also meant fixing the status label's font selection, which had been falling back to the same size as the score whenever the smaller font in the ladder was not the smallest one actually available. Award boards no longer show a value column at all -- diagnose_award_odds.py already established there is no legitimate odds source to back a number with, and a bare figure with no header read as more authoritative than a computed ranking should. The static side panel, which is a separate rendering path from the scrolling strip, is rewritten to share the exact same one-row margin discipline as everything else; it had never been touched during the earlier margin-unification pass, and the baseball bases diagram's bottom two markers were overflowing the panel by a full pixel with zero margin left at all -- worth catching properly, since a display meant to sit inside a case treats that margin as a requirement, not a preference."
+    },
+    {
+      "version": "0.16.1",
+      "released": "2026-08-10",
+      "notes": "Award boards now label their value column PROJ instead of SCR. diagnose_award_odds.py confirmed ESPN's structured futures endpoint carries only team-level markets -- World Series, division winners -- and nothing for individual player awards, so there is no clean, ToS-safe source for real MVP/Cy Young/Rookie of the Year odds. The column has always shown a computed weighted ranking, not a market price; the label now says so, rather than reading as though it might be one."
+    },
+    {
+      "version": "0.16.0",
+      "released": "2026-08-09",
+      "notes": "Adds live games from outside the followed teams, across MLB, NBA and NFL, shown only while they are actually live -- a final or a fixture for a team you don't follow never appears; the moment a game you were glancing at ends, it drops off the strip. This session also unified vertical layout across every segment: section breaks are single lines instead of doubled, and every segment -- clock, weather, forecast columns, leaderboards, section banners, the performer note, and a real bug in the live-game score row that was drawing text off the bottom of the panel entirely -- now shares one consistent 1px top-and-bottom margin. Getting that consistent required accounting for this bitmap font's built-in leading: a glyph's visible ink starts a few pixels below the y coordinate passed to draw it, so text anchored naively at the edge either floats with a large unwanted gap or, worse, clips against the panel boundary. Two small helpers measure that leading directly and every text-anchored segment now uses them."
+    },
+    {
+      "version": "0.15.0",
+      "released": "2026-08-09",
+      "notes": "Section breaks are single lines in the heavier gold, not doubled -- the second line was what made them read as a different kind of divider from everything else on the strip. Finals and fixtures now give the team crest full size: the status label moves to a smaller font, freeing the height for the logo, and the whole block is centred with a real margin top and bottom. Getting the bottom margin right needed measuring the font's actual glyph extent rather than its nominal height -- this bitmap font carries built-in top padding, so a height-only estimate under-counts by a pixel and the last row clips against the panel edge. Live games are unaffected; their crest stays the size already tuned to leave room for the situation line. Adds diagnose_award_odds.py: a script to check, on real data, whether ESPN's structured API carries individual award odds (MVP, Cy Young, Rookie of the Year) before any parsing is written against a guessed shape -- the confirmed structured endpoint covers team futures, and whether it extends to player awards has not been verified."
+    },
+    {
+      "version": "0.14.0",
+      "released": "2026-08-09",
+      "notes": "The fixed panel follows ticker convention and knows which sport it is showing. Sides are stacked with scores right-aligned rather than placed left and right, which is how a ticker sets a game and is what buys room for a situation line. Baseball shows bases, count and outs alternating with whoever is at the plate; football shows down, distance and field position and marks possession beside the team holding it; basketball shows period and clock. The alternation exists because sixty-four pixels will not hold the situation and a player name at once. Which game holds the module is now an ordered preference rather than one nominated team, so when several followed teams play at once the choice is deliberate."
+    },
+    {
+      "version": "0.13.0",
+      "released": "2026-08-09",
+      "notes": "Four changes. Games are drawn as two crests facing each other with the score beneath each -- the followed team always on the left, so you know which figure is yours without reading abbreviations. Weather gains drawn icons, a five-hour outlook and a five-day forecast, and leads with the current temperature and what it feels like; the icons are drawn from primitives rather than fetched, because at ten pixels an icon has to be designed for ten pixels. Award watch lists get their own section behind a drawn trophy, since a computed opinion should not be presented as the same kind of thing as a factual leaderboard. And a live game for one nominated team can be pinned to the leftmost module while everything else scrolls past it, so a game you care about does not scroll away mid-at-bat."
+    },
+    {
+      "version": "0.12.0",
+      "released": "2026-08-09",
+      "notes": "Adds a clock, removes the headlines, and fixes the freeze. The freeze was dead rotation slots: the plugin declared four display modes and answered to one, so the controller offered the other three, the plugin declined, and the panel held its last frame while the rotation worked through them. It now declares a single mode in either layout. The clock repaints in place rather than through a rebuild -- recomposing the strip for a minute change costs hundreds of milliseconds, and a clock that only advanced on rebuild would sit minutes behind on a long pass. Headlines are gone; the section banner's second gold rule is gone too, since no other section carries one."
+    },
+    {
+      "version": "0.11.1",
+      "released": "2026-08-09",
+      "notes": "The statistics block now announces itself. Each team opens with a crest, so a run of leaderboards arriving with nothing but a title read as a continuation of the last team rather than a change of subject. The block is introduced by a section banner -- the MLB mark at full panel height beside 'MLB / SEASON LEADERS' -- behind a rule heavier than the hairline used between items, since sections need more separation than the things inside them. The banner is suppressed when every leaderboard is empty, so the strip never announces statistics and then shows none."
+    },
+    {
+      "version": "0.11.0",
+      "released": "2026-08-09",
+      "notes": "Weather added to the strip, from the US National Weather Service -- free, keyless, and the authoritative source the commercial services resell. Shows the temperature now, tonight's outlook, and any active warning. Weather leads the strip and an active warning takes its top line in alert colour: a severe thunderstorm warning is the one thing on this board more urgent than a live score, and burying it under the temperature would be the wrong way round. Defaults to Bayonne, New Jersey; any point works. The two-stage lookup NWS requires -- a point resolves to a forecast office and grid square before that grid serves forecasts -- is resolved once and kept, since it never changes for a fixed location."
+    },
+    {
+      "version": "0.10.0",
+      "released": "2026-08-09",
+      "notes": "Team headlines added to the strip. ESPN keys news on a numeric team id rather than an abbreviation, which the scoreboard already carries, so no extra lookup is needed to find it. Headlines wrap over three lines instead of running out flat: set as one long line a headline would be several panels wide, and by the time its end scrolled past you would have lost the beginning. Text that overruns is marked with an ellipsis rather than stopping mid-sentence as though the headline simply ended. News sits last on the strip -- it is the least time-critical thing here, and someone looking for a score should not have to scroll past it -- and refreshes on its own half-hourly timer, since it moves far more slowly than a game and each team is a separate request."
+    },
+    {
+      "version": "0.9.2",
+      "released": "2026-08-09",
+      "notes": "Fixes the scroll freezing. Composing the strip costs tens of milliseconds -- more on a Pi that is also driving the matrix -- and it was being composed from the render path, so any instability in the underlying data could rebuild it on every frame and stop the board dead. Rebuilds are now throttled to one every few seconds regardless of what changes: a strip a few seconds stale is invisible, a rebuild every frame is a frozen display. The scratch canvas is also sized from the content rather than a flat 8000 pixels, since allocating and clearing that buffer was itself part of the cost."
+    },
+    {
+      "version": "0.9.1",
+      "released": "2026-08-09",
+      "notes": "Fixes the scroll stalling as it reaches the award segments. The leaderboard and award sections were rebuilt on the render path, which runs every frame, and computing the award standings is a full weighted scoring pass over every leaderboard -- doing that a hundred times a second is enough to stall a Pi that is also driving the matrix. The sections are now rebuilt on a timer, since the data behind them refetches every few hours. Also logs the strip's sections whenever they change, because a section missing for want of data looks exactly like a strip that ends there."
+    },
+    {
+      "version": "0.9.0",
+      "released": "2026-08-09",
+      "notes": "Updates are adopted off-screen. A rebuilt strip now waits for the scroll to reach its seam instead of replacing the image the instant data changes, which shifted every segment after the changed one sideways under the reader -- and with a live game changing every pitch, that was constant. Teams playing now also lead the strip: a live score is the one thing on this board that will not keep, and leaving it in configured order meant waiting most of a pass to see it."
+    },
+    {
+      "version": "0.8.0",
+      "released": "2026-08-09",
+      "notes": "Leaderboards restored to what they were before the merge, now riding the same scroll as the scores. Three ranked rows rather than two, split by league rather than pooled across MLB -- an AL home run race and an NL one are different stories and merging them hides both -- and the award watch lists are back: MVP, Cy Young and Rookie of the Year, each per league. Each segment is a small table with the names starting at one column and the values ending at another, both measured across every row, so the figures align vertically instead of running ragged. The title and its column header share the top row and are sized to sit side by side."
+    },
+    {
+      "version": "0.7.0",
+      "released": "2026-08-09",
+      "notes": "Season leaderboards merged onto the same strip as the scores. Two plugins meant the display handed between them, so a leaderboard and a score could never be part of one scroll; folding the leaders in makes the board continuous. Leaderboards draw in the same rhythm as a game segment -- a title over two ranked rows, matching a status line over two team lines -- so a score and a leaderboard read as one design. Categories, league split and depth are configurable, and season totals keep their own slow cache since they move far more slowly than a game does."
+    },
+    {
+      "version": "0.6.1",
+      "released": "2026-08-09",
+      "notes": "In the strip layout the plugin now answers only to its own mode. It declares four modes so the layout can be switched without reinstalling, but the strip was drawing for all of them -- taking four rotation slots for one board and crowding out every other plugin sharing the display. The card modes now decline and hand the panel straight back."
+    },
+    {
+      "version": "0.6.0",
+      "released": "2026-08-09",
+      "notes": "Offensive lines finally appear, and the reason they did not is worth recording: baseball summaries carry no leaders block at all. Two releases of work fetching that endpoint were retrieving nothing. The scoreboard supplies a single rated performer per game -- sometimes a hitter, often a pitcher -- so when it is a pitcher the hitter must be derived from the boxscore, which lists every batter. That is now what happens, scored by hits, home runs and runs batted in. Also fixes taking only the first entry in a leaders category: a category can carry one performer per team, and the discarded second entry was sometimes the only hitter available."
+    },
+    {
+      "version": "0.5.0",
+      "released": "2026-08-09",
+      "notes": "Offensive performances now appear. The scoreboard supplies one headline performer per team and in baseball that is nearly always the pitcher, so the board never showed a hitter; the summary endpoint, which lists every category, is now consulted whenever no batting line is present and its results are merged rather than discarded. Each game shows a single performer chosen by context: the followed team's offensive line, or the winner's when the followed team lost, because the story of a loss is who beat you. The category heading is gone -- PITCH and RAT alike added a word without adding information, and the player's name is the heading. Dark crests such as the Yankees and Giants are lifted clear of an unlit panel: broadcast graphics place dark marks on a light plate, a matrix has no plate, so the mark itself is brightened proportionally with its hue preserved and bright crests untouched."
+    },
+    {
+      "version": "0.4.0",
+      "released": "2026-08-09",
+      "notes": "Category codes are translated before they reach the board. ESPN labels its top performer with internal shorthand, and 'RAT' -- a composite rating -- says nothing to a viewer; codes that cannot be explained are now replaced with a label read off the stat line itself, so a pitching line reads PITCH and an at-bat line reads BAT. Baseball games now show a pitcher and a hitter rather than the top two entries, which are often both pitchers and tell you half the story. Fixtures carry the weekday, the month and day, and the time together: the weekday alone repeats every seven days and a bare clock time is ambiguous on a board you glance at."
+    },
+    {
+      "version": "0.3.2",
+      "released": "2026-08-09",
+      "notes": "A fixture now always names its day: TDY for tonight, the weekday within a week, and the weekday plus a date beyond that. A bare clock time is ambiguous on a board you glance at, since tonight at 7:05 and next Tuesday at 7:05 look identical. Also replaces a %-I format code, which is not portable, with explicit zero-stripping."
+    },
+    {
+      "version": "0.3.1",
+      "released": "2026-08-09",
+      "notes": "Game leaders are now read from the scoreboard response, where ESPN carries them on the competition itself. The plugin was asking the per-game summary endpoint instead, whose leaders block is shaped differently and is not populated for every sport -- which is why finals showed no stat line despite the data being available. The summary is still consulted, but only for games the scoreboard did not cover, so most games now need no second request at all. Adds diagnose_leaders.py, which queries both sources directly and reports what each returns per game."
+    },
+    {
+      "version": "0.3.0",
+      "released": "2026-08-09",
+      "notes": "One continuous strip across every team rather than one per team, so the board scrolls without stopping or blanking between them. Each team is trimmed to what a glance should show -- any live game, the single most recent final, and the next fixture -- instead of a week of results and a fortnight of schedule. Both sides of a game now carry a logo, not just the followed team: the opponent is half the result. The standout performance sits beside its own final rather than in a trailing section, because it is a fact about that result. Removing the strip's leading blank space also fixed a blank frame once per pass, which the wrap made pointless."
+    },
+    {
+      "version": "0.2.0",
+      "released": "2026-08-09",
+      "notes": "Scrolling team strips. Each team now gets one wide image scrolled past the panel carrying everything about that team in order -- a full-height logo and name, any live game, finals, fixtures, then standout performances -- rather than cycling card by card across all five. Card-by-card rotation never builds a picture of any one team; a strip gives you the whole team and then moves on. Live games draw their sport's own detail: a diamond with the runners plus the count and outs for baseball, possession and down-and-distance for football, and for basketball just the clock, because nothing else changes fast enough to earn the space. The strip is composed once and cached against its data, so each frame is a crop rather than a redraw."
+    },
+    {
+      "version": "0.1.0",
+      "released": "2026-08-09",
+      "notes": "Initial release. One board for several teams across three leagues, answering 'is anyone I follow playing' rather than covering one league thoroughly. Games come from ESPN's public scoreboard endpoints, which share a shape across baseball, basketball and football, so all three leagues use one fetcher. Notable performers come from the per-game summary. Live games refresh on a short timer and everything else on a long one. Layout follows the conventions worked out for the baseball-stats leaderboard: sizing derived from the panel, one font per card, text inset from the module edge, spare height shared, names folded to ASCII, and BDF fonts compiled rather than loaded as if they were PIL fonts. Team abbreviations are matched through an alias table, so a team configured as NYK still matches a feed that says NY and vice versa -- a mismatch there is invisible, producing an empty board rather than an error."
+    }
+  ],
+  "last_updated": "2026-08-11",
+  "stars": 0,
+  "downloads": 0,
+  "verified": false,
+  "screenshot": "",
+  "class_name": "LocalScoreboardPlugin",
+  "entry_point": "manager.py",
+  "compatible_versions": [
+    ">=2.0.0"
+  ]
+}
