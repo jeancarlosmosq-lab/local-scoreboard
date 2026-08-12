@@ -408,15 +408,15 @@ def main():
     print("PASS  fixture labels always name a day, adding the date when needed")
 
     # A regional feed (YES) and a national one (ESPN) can both be present
-    # on the same competition at once -- every entry found is joined, not
-    # just whichever came first, so a local channel and a streaming
-    # exclusive can both surface for an upcoming game.
+    # on the same competition at once -- one of each is kept, so a local
+    # channel and a streaming exclusive can both surface for an upcoming
+    # game.
     multi_broadcast = {"broadcasts": [
         {"market": "home", "names": ["YES"]},
         {"market": "national", "names": ["ESPN"]},
     ]}
     assert src._parse_broadcast(multi_broadcast) == "YES/ESPN", (
-        f"expected both local and national channels joined: "
+        f"expected one local and one national channel joined: "
         f"{src._parse_broadcast(multi_broadcast)!r}"
     )
     dup_broadcast = {"broadcasts": [
@@ -429,8 +429,35 @@ def main():
     assert src._parse_broadcast({"broadcast": "FOX"}) == "FOX"
     assert src._parse_broadcast({"broadcast": {"shortName": "Peacock"}}) == "Peacock"
     assert src._parse_broadcast({}) == ""
-    print(f"PASS  broadcast parsing joins local and national/streaming "
-          f"channels: {src._parse_broadcast(multi_broadcast)!r}")
+    print(f"PASS  broadcast parsing joins one local and one national/"
+          f"streaming channel: {src._parse_broadcast(multi_broadcast)!r}")
+
+    # Several regional feeds at once (both sides' home markets, sometimes
+    # an extra blackout/alternate entry) must not all pile up into one
+    # unreadable string -- only the first local entry ESPN lists is kept,
+    # since a viewer picks one channel, not a wall of every market that
+    # happens to carry the game.
+    many_locals = {"broadcasts": [
+        {"market": "home", "names": ["SNY"]},
+        {"market": "away", "names": ["NBCSCH"]},
+        {"market": "away", "names": ["MASN"]},
+    ]}
+    assert src._parse_broadcast(many_locals) == "SNY", (
+        f"expected only the first local channel, not every regional feed "
+        f"stacked together: {src._parse_broadcast(many_locals)!r}"
+    )
+    local_and_national = {"broadcasts": [
+        {"market": "home", "names": ["SNY"]},
+        {"market": "away", "names": ["NBCSCH"]},
+        {"market": "national", "names": ["FOX"]},
+    ]}
+    assert src._parse_broadcast(local_and_national) == "SNY/FOX", (
+        f"a second local feed should still be dropped even with a "
+        f"national broadcaster also present: "
+        f"{src._parse_broadcast(local_and_national)!r}"
+    )
+    print("PASS  broadcast parsing keeps only the most common local "
+          "channel, not every regional feed on the game")
 
     # ---- 4. Team filtering and cadence ----------------------------------
     gm = GamesManager(log, cache_manager=FakeCache())

@@ -114,4 +114,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.37.0
+0.38.0

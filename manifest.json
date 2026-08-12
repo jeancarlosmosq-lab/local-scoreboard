@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.37.0",
+  "version": "0.38.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -21,6 +21,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.38.0",
+      "released": "2026-08-12",
+      "notes": "Broadcast channel display no longer stacks every regional feed ESPN lists for a game -- a matchup with both sides' home-market broadcasters (and sometimes a blackout/alternate entry on top) could read as three local channel names joined together. Now keeps only the first local/regional entry ESPN lists plus at most one national or streaming entry, e.g. 'SNY/FOX' instead of 'SNY/NBCSCH/FOX'."
+    },
     {
       "version": "0.37.0",
       "released": "2026-08-12",

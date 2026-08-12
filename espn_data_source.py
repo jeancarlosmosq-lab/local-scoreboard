@@ -460,7 +460,7 @@ class ESPNGamesSource:
 
     @staticmethod
     def _parse_broadcast(comp: Dict) -> str:
-        """The TV/streaming channel(s), from whichever field ESPN populated.
+        """The TV/streaming channel, from whichever field ESPN populated.
 
         ESPN carries this under two different keys depending on sport and
         endpoint vintage -- "broadcasts" (a list, usually with a "names"
@@ -470,42 +470,60 @@ class ESPNGamesSource:
         *existence* on a real competition object has been confirmed here --
         not its exact internal shape for every sport.
 
-        A game can carry more than one entry at once -- a local/regional
-        feed (YES, SNY) alongside a national broadcaster (ESPN, FOX) or a
-        streaming exclusive (Peacock, Apple TV+) -- so every entry found
-        is collected and joined, not just whichever came first.
+        A game can carry several regional feeds at once -- both sides'
+        home-market broadcaster, sometimes an extra blackout/alternate
+        entry -- and joining all of them read as a wall of channel names
+        rather than something a viewer could act on. Only the *first*
+        regional/local entry ESPN lists is kept (each competition's own
+        "broadcasts" list has consistently put the relevant market first
+        in the games checked so far), alongside at most one national or
+        streaming entry -- one local channel plus one national/streaming
+        option is what a viewer actually chooses between.
         """
-        found = []
+        local = None
+        national = None
 
-        def add(value) -> None:
+        def add(value, market: str) -> None:
+            nonlocal local, national
             name = ascii_fold(str(value)).strip()
-            if name and name not in found:
-                found.append(name)
+            if not name:
+                return
+            if market in ("home", "away"):
+                if local is None:
+                    local = name
+            elif national is None:
+                national = name
 
         entries = comp.get("broadcasts")
         if isinstance(entries, list):
             for entry in entries:
                 if not isinstance(entry, dict):
                     continue
+                market = str(entry.get("market") or "").lower()
                 names = entry.get("names")
                 if isinstance(names, list):
                     for name in names:
                         if name:
-                            add(name)
+                            add(name, market)
                 elif entry.get("market"):
-                    add(entry["market"])
+                    add(entry["market"], market)
 
-        if not found:
+        if local is None and national is None:
             single = comp.get("broadcast")
             if isinstance(single, str) and single:
-                add(single)
+                add(single, "")
             elif isinstance(single, dict):
                 for key in ("shortName", "name", "media", "callLetters"):
                     value = single.get(key)
                     if isinstance(value, str) and value:
-                        add(value)
+                        add(value, "")
+                        break
 
-        return "/".join(found[:3])
+        parts = []
+        for value in (local, national):
+            if value and value not in parts:
+                parts.append(value)
+        return "/".join(parts)
 
     @staticmethod
     def _parse_situation(comp: Dict, league: str) -> Dict:
