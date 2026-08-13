@@ -2509,6 +2509,90 @@ def main():
           f"and temperature (gap_above={gap_above}px, "
           f"gap_below={gap_below}px), not pinned to one side of it")
 
+    # The forecast row (whichever of NEXT HOURS / 4 DAY FORECAST) must be
+    # centred under its own header when the header is wider than the
+    # columns, not left flush with it -- a header wider than one short
+    # column used to leave all the slack on the right, the same
+    # slack-dumped-on-one-side mistake this file already fixes
+    # vertically everywhere else. When the columns are wider than the
+    # header instead, they stay flush-left, since there is no slack to
+    # split. Checked by spying on both _draw_forecast_row's own starting
+    # x (the header's position, whatever preceded it in the weather
+    # block) and the x each real _draw_forecast_column call receives, so
+    # the comparison is against where the header actually is rather than
+    # an assumption about it.
+    from PIL import ImageDraw as _CenterID
+    rcenter = StripRenderer(FakeDisplay(192, 32), {}, log)
+    row_start_calls = []
+    col_calls = []
+    orig_frow = rcenter._draw_forecast_row
+    orig_fcol = rcenter._draw_forecast_column
+
+    def _spy_frow(img, draw, x, *a, **kw):
+        row_start_calls.append(x)
+        return orig_frow(img, draw, x, *a, **kw)
+
+    def _spy_fcol(draw, x, *a, **kw):
+        if not kw.get("measure_only"):
+            col_calls.append(x)
+        return orig_fcol(draw, x, *a, **kw)
+
+    rcenter._draw_forecast_row = _spy_frow
+    rcenter._draw_forecast_column = _spy_fcol
+
+    narrow_weather = {"now_temp": 78, "units": "F", "now_condition": "Clear",
+                      "daily": [{"name": "MON", "temp": 80}]}
+    narrow_probe = _CenterID.Draw(Image.new("RGB", (1, 1)))
+    narrow_font, narrow_row_h = rcenter._fit_font(narrow_probe, 4, rcenter.height)
+    header_w = rcenter._measure(narrow_probe, "4 DAY FORECAST", narrow_font)[0]
+
+    rcenter._draw_weather(
+        Image.new("RGB", (300, 32), (0, 0, 0)), _CenterID.Draw(
+            Image.new("RGB", (300, 32), (0, 0, 0))),
+        2, narrow_weather, narrow_font, narrow_row_h)
+    assert len(row_start_calls) == 1 and len(col_calls) == 1, (
+        row_start_calls, col_calls
+    )
+    row_x = row_start_calls[0]
+    single_col_w = orig_fcol(
+        _CenterID.Draw(Image.new("RGB", (1, 1))), 0,
+        {"name": "MON", "temp": 80}, narrow_font, narrow_row_h, "F",
+        content_top=narrow_row_h + 1, measure_only=True)
+    assert single_col_w < header_w, (
+        f"test setup error: expected the single column ({single_col_w}px) "
+        f"to be narrower than the header ({header_w}px), or this proves "
+        f"nothing about centering"
+    )
+    expected_shift = max(0, (header_w - single_col_w) // 2)
+    assert col_calls[0] > row_x, (
+        f"a single narrow column under a wide header should shift right "
+        f"to centre, not sit flush at the header's own start: "
+        f"column={col_calls[0]}, header={row_x}"
+    )
+    assert abs((col_calls[0] - row_x) - expected_shift) <= 1, (
+        f"column should centre under the header: got shift "
+        f"{col_calls[0] - row_x}px, expected ~{expected_shift}px "
+        f"(header={header_w}px, column={single_col_w}px)"
+    )
+
+    wide_weather = {"now_temp": 78, "units": "F", "now_condition": "Clear",
+                    "daily": [{"name": "MON", "temp": 80}, {"name": "TUE", "temp": 82},
+                             {"name": "WED", "temp": 79}, {"name": "THU", "temp": 77}]}
+    row_start_calls.clear()
+    col_calls.clear()
+    rcenter._draw_weather(
+        Image.new("RGB", (300, 32), (0, 0, 0)), _CenterID.Draw(
+            Image.new("RGB", (300, 32), (0, 0, 0))),
+        2, wide_weather, narrow_font, narrow_row_h)
+    assert col_calls[0] == row_start_calls[0], (
+        f"columns wider than the header should stay flush-left with it, "
+        f"not shift: column={col_calls[0]}, header={row_start_calls[0]}"
+    )
+    print(f"PASS  forecast columns centre under a wider header "
+          f"({single_col_w}px column under a {header_w}px header, shifted "
+          f"{expected_shift}px) and stay flush-left when they're the "
+          f"wider side")
+
     # "NEXT HOURS"/"4 DAY FORECAST" used to sit at the same top margin the
     # column's own day/hour label independently anchored to, using a
     # different (larger) font -- header and content competing for the same

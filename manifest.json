@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.46.0",
+  "version": "0.47.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.47.0",
+      "released": "2026-08-13",
+      "notes": "Forecast columns (both hourly and the 4-day) now centre under their own section header instead of always starting flush with its left edge -- a header wider than however many columns actually came back for the day/hour window left them looking pinned to one side of their own label. Also chased the remaining scroll pause further: _fit_font/_largest_fit were rescanning and remeasuring every font candidate on every single composition despite the result never changing mid-session, now memoized; and the rebuild throttle moved from 10s to 15s. Data still refetches every 5s regardless -- only how often a fetched change becomes a new image is capped, so a live update is never stale by more than one fetch."
+    },
     {
       "version": "0.46.0",
       "released": "2026-08-12",

@@ -38,6 +38,8 @@ Current conditions and the 4-day forecast stay up regardless of a live game -- t
 
 The hourly forecast has its own separate cutoff on top of that, always on: shown 6am-8pm, hidden overnight. An hour-by-hour forecast is for deciding what to do with the rest of today; by 8pm it's mostly covering hours you'll be asleep for. The 4-day forecast always stays up regardless of the time of day; the moon phase does not, unless weather.hide_forecast_when_live is off.
 
+Both the hourly and 4-day columns centre under their own section header rather than always starting flush with its left edge -- a header wider than the day/hour window that actually came back otherwise left the columns looking pinned to one side of their own label.
+
 Current conditions (the icon and plain temperature) hide from the scroll whenever the static panel is already showing that same reading -- nothing live, so the clock/weather fallback has that slot -- the same duplicate-avoidance as the scroll's own clock. Feels-like isn't shown on the static panel at all, so it stays up in the scroll regardless, using the icon and single-line treatment the temperature would otherwise get rather than sitting paired under a hidden number.
 
 When nothing is live, the leftmost module shows this same clock-and-weather block on its own, pinned in place while the rest of the strip scrolls past — the same slot a live game takes over automatically the moment there is one. The scroll carries its own copy of the clock only while that slot has been taken over by a live game -- otherwise the static panel is already showing the time, and a second copy scrolling past would just be the same clock twice.
@@ -124,4 +126,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.46.0
+0.47.0

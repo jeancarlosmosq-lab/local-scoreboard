@@ -115,6 +115,15 @@ class StripRenderer:
             self.height = getattr(display_manager, "height", 32)
 
         self._font_cache: Dict[Any, Any] = {}
+        # _fit_font/_largest_fit scan every FONT_LADDER candidate and
+        # measure it, but the result only ever depends on (rows,
+        # available) -- the panel's own height never changes mid-session,
+        # so this was rescanning and remeasuring the same candidates on
+        # every single composition. Real, avoidable work on the render
+        # path's own critical section (composing a rebuilt strip already
+        # competes with the matrix output for CPU on a Pi).
+        self._fit_font_cache: Dict[Any, Any] = {}
+        self._largest_fit_cache: Dict[Any, Any] = {}
         self._strip_cache: Optional[Image.Image] = None
         self._strip_key = None
         # A rebuilt strip waits here until the scroll reaches its seam. Data
@@ -145,12 +154,17 @@ class StripRenderer:
         # concurrent render thread, visible as a small periodic pause in
         # the scroll. The background thread was never free -- it was
         # competing for the same CPU the matrix output itself needs on
-        # time. Data still refetches every live_interval regardless; this
-        # only widens how often a fetched change gets turned into a new
-        # image, so the worst-case lag for a live update grows from ~5s to
-        # ~10s while composition itself becomes roughly half as frequent.
+        # time. First raised to 10s, which helped but left a smaller pause
+        # still noticeable; 15s next, paired with actually cheapening each
+        # composition (see _fit_font/_largest_fit's own memoization) since
+        # widening the gap alone was trading away freshness without fully
+        # solving the underlying cost. Data still refetches every
+        # live_interval regardless; this only widens how often a fetched
+        # change gets turned into a new image, so the worst-case lag for a
+        # live update grows to ~15s while composition itself becomes
+        # roughly a third as frequent as the original 5s.
         self._last_build = 0.0
-        self._min_rebuild_interval = 10.0
+        self._min_rebuild_interval = 15.0
         # The actual composition runs on a background thread once something
         # is already on screen, so a rebuild -- still tens to hundreds of ms
         # -- never blocks the render path itself. Confirmed live: at the
@@ -228,7 +242,17 @@ class StripRenderer:
         never even tried. This scans every candidate and keeps the one with
         the greatest row height that still fits, which is what "make this
         as big as the space allows" actually means.
+
+        Memoized on (rows, available) -- neither the panel's own height
+        nor a given call site's row constraint changes mid-session, so
+        the result is identical every time, and rescanning/remeasuring
+        every FONT_LADDER candidate on every single composition was
+        avoidable work on the render path's own critical section.
         """
+        key = (rows, available)
+        if key in self._largest_fit_cache:
+            return self._largest_fit_cache[key]
+
         candidates = []
         for name in self.FONT_LADDER:
             font = self._named_font(name)
@@ -251,11 +275,16 @@ class StripRenderer:
             if rows * row_h <= available:
                 if best is None or row_h > best[1]:
                     best = (font, row_h)
-        if best:
-            return best
-        return self._fit_font(draw, rows, available)
+        result = best if best else self._fit_font(draw, rows, available)
+        self._largest_fit_cache[key] = result
+        return result
 
     def _fit_font(self, draw, rows: int, available: int):
+        # Memoized the same way and for the same reason as _largest_fit.
+        key = (rows, available)
+        if key in self._fit_font_cache:
+            return self._fit_font_cache[key]
+
         candidates = []
         for name in self.FONT_LADDER:
             font = self._named_font(name)
@@ -270,6 +299,7 @@ class StripRenderer:
             candidates = [ImageFont.load_default()]
 
         smallest = None
+        result = None
         for font in candidates:
             _, h = self._measure(draw, "Ay", font)
             row_h = h + 1
@@ -278,12 +308,16 @@ class StripRenderer:
             if smallest is None or row_h < smallest[1]:
                 smallest = (font, row_h)
             if rows * row_h <= available:
-                return font, row_h
-        if smallest:
-            return smallest
-        font = candidates[0]
-        _, h = self._measure(draw, "Ay", font)
-        return font, h + 1
+                result = (font, row_h)
+                break
+        if result is None:
+            result = smallest if smallest else None
+        if result is None:
+            font = candidates[0]
+            _, h = self._measure(draw, "Ay", font)
+            result = (font, h + 1)
+        self._fit_font_cache[key] = result
+        return result
 
     def font_report(self) -> str:
         return "; ".join(
@@ -1204,14 +1238,9 @@ class StripRenderer:
         hourly = [h for h in (weather.get("hourly") or []) if h.get("temp") is not None]
         if show_forecast and daytime and hourly:
             x += self._draw_divider(img, draw, x)
-            draw.text((x, self._text_top(draw, font, self.MARGIN)),
-                      "NEXT HOURS", font=font, fill=self.DIM)
-            column = x
-            for entry in hourly[:5]:
-                column += self._draw_forecast_column(
-                    draw, column, entry, font, row_h, unit,
-                    content_top=forecast_content_top)
-            x = max(x + self._measure(draw, "NEXT HOURS", font)[0], column) + 4
+            x += self._draw_forecast_row(
+                img, draw, x, hourly[:5], "NEXT HOURS", font, row_h, unit,
+                forecast_content_top)
 
         # --- next days ----------------------------------------------------
         # Not gated by show_forecast -- unlike the hourly column and the
@@ -1220,14 +1249,9 @@ class StripRenderer:
         daily = [d for d in (weather.get("daily") or []) if d.get("temp") is not None]
         if daily:
             x += self._draw_divider(img, draw, x)
-            draw.text((x, self._text_top(draw, font, self.MARGIN)),
-                      "4 DAY FORECAST", font=font, fill=self.DIM)
-            column = x
-            for entry in daily[:4]:
-                column += self._draw_forecast_column(
-                    draw, column, entry, font, row_h, unit,
-                    content_top=forecast_content_top)
-            x = max(x + self._measure(draw, "4 DAY FORECAST", font)[0], column) + 4
+            x += self._draw_forecast_row(
+                img, draw, x, daily[:4], "4 DAY FORECAST", font, row_h, unit,
+                forecast_content_top)
 
         # --- moon -----------------------------------------------------------
         if show_forecast and when is not None:
@@ -1270,8 +1294,17 @@ class StripRenderer:
         return x - start
 
     def _draw_forecast_column(self, draw, x: int, entry: Dict, font,
-                              row_h: int, unit: str, content_top: int = None) -> int:
+                              row_h: int, unit: str, content_top: int = None,
+                              measure_only: bool = False) -> int:
         """One forecast column: label, icon, temperature, stacked.
+
+        measure_only skips the actual draw calls and just returns the
+        width this column would consume -- used to size a whole row of
+        columns before any of them (or the header above them) are drawn,
+        so the row can be centred under its own header rather than always
+        starting flush with it. Kept as one function rather than a
+        parallel measuring helper so the two can never drift apart on
+        exactly how a column's width is computed.
 
         Label and temperature use a font strictly smaller than the shared
         body font -- the same trick that let the team crests reach full
@@ -1336,15 +1369,49 @@ class StripRenderer:
 
         width = max(lw, tw, icon_size)
 
-        draw.text((x + (width - lw) // 2, label_y), label, font=text_font,
-                  fill=self.LABEL)
-        if icon_size:
-            self._draw_weather_icon(
-                draw, x + (width - icon_size) // 2, icon_top, icon_size,
-                self.condition_kind(entry.get("condition", "")))
-        draw.text((x + (width - tw) // 2, temp_y), temp, font=text_font,
-                  fill=self.VALUE)
+        if not measure_only:
+            draw.text((x + (width - lw) // 2, label_y), label, font=text_font,
+                      fill=self.LABEL)
+            if icon_size:
+                self._draw_weather_icon(
+                    draw, x + (width - icon_size) // 2, icon_top, icon_size,
+                    self.condition_kind(entry.get("condition", "")))
+            draw.text((x + (width - tw) // 2, temp_y), temp, font=text_font,
+                      fill=self.VALUE)
         return width + 5
+
+    def _draw_forecast_row(self, img, draw, x: int, entries: List[Dict],
+                           header: str, font, row_h: int, unit: str,
+                           content_top: int) -> int:
+        """A section header ("NEXT HOURS", "4 DAY FORECAST") with its own
+        row of forecast columns beneath it, the columns centred under the
+        header rather than always starting flush with its left edge.
+
+        The header and its columns rarely measure the same width -- a
+        short header over many columns, or a long one ("4 DAY FORECAST")
+        over few, however many actually came back for the day/hour window
+        -- and starting the columns flush-left under a wider header left
+        them looking pinned to one side of their own label instead of
+        belonging to it, the same slack-dumped-on-one-side mistake this
+        file already fixes everywhere vertically. Measured with a
+        measure-only pass over the same _draw_forecast_column this then
+        draws for real, so the two can never disagree on a column's width.
+        """
+        total_w = sum(
+            self._draw_forecast_column(draw, 0, entry, font, row_h, unit,
+                                       content_top=content_top,
+                                       measure_only=True)
+            for entry in entries
+        )
+        header_w = self._measure(draw, header, font)[0]
+        draw.text((x, self._text_top(draw, font, self.MARGIN)),
+                  header, font=font, fill=self.DIM)
+        column = x + max(0, (header_w - total_w) // 2)
+        for entry in entries:
+            column += self._draw_forecast_column(
+                draw, column, entry, font, row_h, unit,
+                content_top=content_top)
+        return max(x + header_w, column) + 4
 
     def _truncate(self, draw, text: str, font, max_width: int) -> str:
         """Longest prefix that fits, so a condition never runs into the next
