@@ -1018,6 +1018,53 @@ def main():
           f"({len(groups)} dividers, smallest real gap "
           f"{min(gaps) if gaps else 'n/a'}px)")
 
+    # The "LIVE / AROUND THE LEAGUE" banner must be followed by a divider
+    # before its own first game, the same as every other section banner
+    # (leaderboards, awards) already is -- missing here previously, which
+    # read as the banner and the game running together as one block
+    # instead of a header over its own content. Checked by call order,
+    # not pixels: _draw_divider must run between _draw_live_section and
+    # the _draw_game that follows it.
+    rlive_div = StripRenderer(FakeDisplay(192, 32), {}, log, logo_manager=logos)
+    live_div_calls = []
+    orig_live_section = rlive_div._draw_live_section
+    orig_divider = rlive_div._draw_divider
+    orig_game = rlive_div._draw_game
+
+    def _spy_live_section(*a, **kw):
+        live_div_calls.append("live_section")
+        return orig_live_section(*a, **kw)
+
+    def _spy_divider(*a, **kw):
+        live_div_calls.append("divider")
+        return orig_divider(*a, **kw)
+
+    def _spy_game(*a, **kw):
+        live_div_calls.append("game")
+        return orig_game(*a, **kw)
+
+    rlive_div._draw_live_section = _spy_live_section
+    rlive_div._draw_divider = _spy_divider
+    rlive_div._draw_game = _spy_game
+
+    single_other_live = [{
+        "id": "divo1", "league": "nba", "state": STATE_LIVE, "start": "",
+        "away": {"abbr": "BOS", "score": "50"}, "home": {"abbr": "LAL", "score": "48"},
+        "situation": {"kind": "basketball", "clock": "5:00"}, "leaders": [],
+    }]
+    rlive_div.build_strip(
+        [({"abbr": "NYY", "league": "mlb", "name": "Yankees"},
+          [dict(both_game, id="divf1")])],
+        other_live=single_other_live,
+    )
+    live_idx = live_div_calls.index("live_section")
+    assert live_div_calls[live_idx + 1] == "divider", (
+        f"expected a divider immediately after the live-around-the-league "
+        f"banner, before its first game: {live_div_calls}"
+    )
+    print("PASS  a divider separates the 'LIVE AROUND THE LEAGUE' banner "
+          "from its own first game")
+
     # A leaderboard segment is a table: names start at one column and values
     # end at another, measured across every row, so figures align vertically.
     align_rows = [

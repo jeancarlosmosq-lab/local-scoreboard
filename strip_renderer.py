@@ -133,8 +133,24 @@ class StripRenderer:
         # driving a matrix -- so it must never be able to happen every frame.
         # build_strip is called from the render path, and any instability in
         # the data would otherwise rebuild continuously and freeze the scroll.
+        #
+        # Set higher than live_interval (5s) on purpose, not equal to it.
+        # Once has_any_live() started covering other-live games too, "some
+        # game is live somewhere" became true for large stretches of the
+        # day -- not just the rarer case of a followed team playing -- so
+        # data now refetches on the 5s cadence almost continuously during
+        # that stretch, and background composes were keeping pace with it:
+        # confirmed on the Pi running alongside the real service, a
+        # composition backgrounded this often measurably slowed the
+        # concurrent render thread, visible as a small periodic pause in
+        # the scroll. The background thread was never free -- it was
+        # competing for the same CPU the matrix output itself needs on
+        # time. Data still refetches every live_interval regardless; this
+        # only widens how often a fetched change gets turned into a new
+        # image, so the worst-case lag for a live update grows from ~5s to
+        # ~10s while composition itself becomes roughly half as frequent.
         self._last_build = 0.0
-        self._min_rebuild_interval = 5.0
+        self._min_rebuild_interval = 10.0
         # The actual composition runs on a background thread once something
         # is already on screen, so a rebuild -- still tens to hundreds of ms
         # -- never blocks the render path itself. Confirmed live: at the
@@ -1898,11 +1914,16 @@ class StripRenderer:
 
             # One other-live game right after this team, banner and all,
             # so it reads as its own thing and not part of the team just
-            # shown. No divider needed first -- the team's own block
-            # (or its MVP note) already closed with one.
+            # shown. No divider needed before the banner -- the team's own
+            # block (or its MVP note) already closed with one -- but one
+            # is still needed after it, the same as every other section
+            # banner on the strip (leaderboards, awards): without it the
+            # banner and the game it introduces read as one run-on block
+            # instead of a header over its own content.
             if other_live_queue:
                 game = other_live_queue.pop(0)
                 x += self._draw_live_section(scratch, draw, x, font, row_h)
+                x += self._draw_divider(scratch, draw, x)
                 x += self._draw_game(
                     scratch, draw, x, game, font, row_h,
                     performer=ESPNGamesSource.pick_performer(game, ""),
@@ -1914,6 +1935,7 @@ class StripRenderer:
         # section used to: one banner, then every remaining game.
         if other_live_queue:
             x += self._draw_live_section(scratch, draw, x, font, row_h)
+            x += self._draw_divider(scratch, draw, x)
             for game in other_live_queue:
                 x += self._draw_game(
                     scratch, draw, x, game, font, row_h,

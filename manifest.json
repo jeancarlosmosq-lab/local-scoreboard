@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.45.0",
+  "version": "0.46.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.46.0",
+      "released": "2026-08-12",
+      "notes": "Two fixes. (1) A divider now separates the 'LIVE AROUND THE LEAGUE' banner from its own first game -- every other section banner (leaderboards, awards) already did this, this one was missed, and without it the banner and the game read as one run-on block. (2) The scroll's small periodic pause during live games: composing a rebuilt strip is real CPU work, and since other-live games started keeping the fast (5s) data-refresh cadence on for large stretches of the day, background composes were keeping pace with it and measurably competing with the matrix output for CPU -- confirmed on the Pi. The rebuild throttle is now 10s instead of 5s, roughly halving how often a composition runs; data still refetches every 5s regardless, so a live update is never stale by more than one fetch, only the worst-case time to turn a fetched change into a new image grows from ~5s to ~10s."
+    },
     {
       "version": "0.45.0",
       "released": "2026-08-12",
