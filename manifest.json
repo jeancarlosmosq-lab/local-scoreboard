@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.44.0",
+  "version": "0.45.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.45.0",
+      "released": "2026-08-12",
+      "notes": "Forecast widened back out from 3 days to 4 -- 3 columns left visible dead space under a header ('4 DAY FORECAST') wider than the content it was labeling. Same treatment as before: always shown, including during a live game with weather.hide_forecast_when_live on."
+    },
     {
       "version": "0.44.0",
       "released": "2026-08-12",

@@ -1056,11 +1056,11 @@ class StripRenderer:
         urgent than a live score.
 
         show_forecast controls the hourly columns and the moon phase only
-        -- the 3-day forecast and current conditions always draw
+        -- the 4-day forecast and current conditions always draw
         regardless, current conditions on the same reasoning as the
         warning above (whatever's happening right now outside stays
         visible even while a live game hides everything else competing
-        for the strip), the 3-day forecast because it's brief enough not
+        for the strip), the 4-day forecast because it's brief enough not
         to compete for the same space a live score needs. Off by default
         from the caller's side (weather.hide_forecast_when_live in
         config, opt-in per install) -- the original design kept the whole
@@ -1070,7 +1070,7 @@ class StripRenderer:
         The hourly column has its own separate cutoff on top of that,
         6am-8pm only, read from `when` -- unlike show_forecast this one is
         not configurable, since it is a fixed daily rhythm rather than a
-        per-install preference. The 3-day forecast and moon phase are not
+        per-install preference. The 4-day forecast and moon phase are not
         affected by it.
 
         show_current controls the icon and the plain current-temperature
@@ -1205,13 +1205,13 @@ class StripRenderer:
         if daily:
             x += self._draw_divider(img, draw, x)
             draw.text((x, self._text_top(draw, font, self.MARGIN)),
-                      "3 DAY FORECAST", font=font, fill=self.DIM)
+                      "4 DAY FORECAST", font=font, fill=self.DIM)
             column = x
-            for entry in daily[:3]:
+            for entry in daily[:4]:
                 column += self._draw_forecast_column(
                     draw, column, entry, font, row_h, unit,
                     content_top=forecast_content_top)
-            x = max(x + self._measure(draw, "3 DAY FORECAST", font)[0], column) + 4
+            x = max(x + self._measure(draw, "4 DAY FORECAST", font)[0], column) + 4
 
         # --- moon -----------------------------------------------------------
         if show_forecast and when is not None:

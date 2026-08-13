@@ -30,13 +30,13 @@ Status is colour-coded — green in progress, amber upcoming, grey final, orange
 
 ## Weather, moon phase and countdowns
 
-Ahead of the teams: current conditions and an hourly and 3-day forecast from the US National Weather Service (free, keyless), a clock, the moon's current phase, and days-until for any personal dates you configure — a birthday, a holiday, first day of school. Each countdown gets an icon guessed from its own name (a cake for a birthday, a tree for Christmas, a pencil for school, a star otherwise), and reads "TODAY!" on the day itself.
+Ahead of the teams: current conditions and an hourly and 4-day forecast from the US National Weather Service (free, keyless), a clock, the moon's current phase, and days-until for any personal dates you configure — a birthday, a holiday, first day of school. Each countdown gets an icon guessed from its own name (a cake for a birthday, a tree for Christmas, a pencil for school, a star otherwise), and reads "TODAY!" on the day itself.
 
 A live game — any live game, not just a followed team's — hides the season leaderboards, award watch lists and countdowns entirely, since a live score is what the board exists to show right now and everything else competing for the same scroll only pushes it further away. They come back automatically the moment nothing is live; the underlying data keeps refreshing in the background the whole time, so there's no delay when they reappear. This takes effect immediately, not on the strip's next full lap -- a live game starting or ending forces the newly rebuilt strip in right away rather than waiting for the scroll to finish its current pass, which on a long strip could otherwise be minutes away.
 
-Current conditions and the 3-day forecast stay up regardless of a live game -- the same reasoning that leads the whole strip with weather in the first place, a warning is more urgent than a live score, and a 3-day outlook is brief enough not to compete for the same space. The moon phase and hourly forecast column follow the same hiding rule as leaderboards, but only if `weather.hide_forecast_when_live` is turned on; it defaults to off, so installs that don't set it keep the original always-shown behaviour.
+Current conditions and the 4-day forecast stay up regardless of a live game -- the same reasoning that leads the whole strip with weather in the first place, a warning is more urgent than a live score, and a short outlook is brief enough not to compete for the same space. The moon phase and hourly forecast column follow the same hiding rule as leaderboards, but only if `weather.hide_forecast_when_live` is turned on; it defaults to off, so installs that don't set it keep the original always-shown behaviour.
 
-The hourly forecast has its own separate cutoff on top of that, always on: shown 6am-8pm, hidden overnight. An hour-by-hour forecast is for deciding what to do with the rest of today; by 8pm it's mostly covering hours you'll be asleep for, and the 3-day forecast (and moon phase) stay up the whole time regardless.
+The hourly forecast has its own separate cutoff on top of that, always on: shown 6am-8pm, hidden overnight. An hour-by-hour forecast is for deciding what to do with the rest of today; by 8pm it's mostly covering hours you'll be asleep for. The 4-day forecast always stays up regardless of the time of day; the moon phase does not, unless weather.hide_forecast_when_live is off.
 
 Current conditions (the icon and plain temperature) hide from the scroll whenever the static panel is already showing that same reading -- nothing live, so the clock/weather fallback has that slot -- the same duplicate-avoidance as the scroll's own clock. Feels-like isn't shown on the static panel at all, so it stays up in the scroll regardless, using the icon and single-line treatment the temperature would otherwise get rather than sitting paired under a hidden number.
 
@@ -124,4 +124,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.44.0
+0.45.0

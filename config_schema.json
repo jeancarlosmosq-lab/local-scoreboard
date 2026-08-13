@@ -54,7 +54,7 @@
         "hide_forecast_when_live": {
           "type": "boolean",
           "title": "Hide Moon and Hourly Forecast While Any Game Is Live",
-          "description": "Off by default -- the moon phase and hourly forecast column stay up during a live game the same as always. Turning this on hides those two (current conditions and the 3-day forecast still show, on the same reasoning that keeps a warning visible) whenever any game is live, the same trigger that already hides leaderboards, award watch lists and countdowns.",
+          "description": "Off by default -- the moon phase and hourly forecast column stay up during a live game the same as always. Turning this on hides those two (current conditions and the 4-day forecast still show, on the same reasoning that keeps a warning visible) whenever any game is live, the same trigger that already hides leaderboards, award watch lists and countdowns.",
           "default": false
         }
       }

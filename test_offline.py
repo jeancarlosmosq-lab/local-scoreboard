@@ -2462,7 +2462,7 @@ def main():
           f"and temperature (gap_above={gap_above}px, "
           f"gap_below={gap_below}px), not pinned to one side of it")
 
-    # "NEXT HOURS"/"3 DAY FORECAST" used to sit at the same top margin the
+    # "NEXT HOURS"/"4 DAY FORECAST" used to sit at the same top margin the
     # column's own day/hour label independently anchored to, using a
     # different (larger) font -- header and content competing for the same
     # rows rather than one sitting above the other. The header's own text
@@ -2506,7 +2506,7 @@ def main():
                                {"name": "THU", "temp": 85, "condition": "Clear"}]}
     rheader._draw_weather(header_img, header_spy, 2, header_weather,
                          header_font, header_row_h)
-    header_ys = [y for y, t in header_spy.calls if t == "3 DAY FORECAST"]
+    header_ys = [y for y, t in header_spy.calls if t == "4 DAY FORECAST"]
     label_ys = [y for y, t in header_spy.calls if t in ("WED", "THU")]
     assert header_ys and label_ys, (
         f"expected both the header and a day label to draw text: "
@@ -2516,7 +2516,7 @@ def main():
         f"the day label should start on a row strictly below the header, "
         f"not share its row: header_y={header_ys}, label_y={label_ys}"
     )
-    print(f"PASS  '3 DAY FORECAST' header sits above its columns' own day "
+    print(f"PASS  '4 DAY FORECAST' header sits above its columns' own day "
           f"labels (header y={min(header_ys)}, column y={min(label_ys)}), "
           f"not sharing a row with them")
 
@@ -2687,9 +2687,9 @@ def main():
 
     # show_forecast=False (weather.hide_forecast_when_live, opted into per
     # install) drops the hourly column and the moon phase, but current
-    # conditions and the 3-day forecast must still draw -- current
+    # conditions and the 4-day forecast must still draw -- current
     # conditions on the same reasoning that already keeps a weather
-    # warning up during a live game, the 3-day forecast because it's
+    # warning up during a live game, the 4-day forecast because it's
     # brief enough not to compete for the same space a live score needs.
     forecast_weather = dict(moon_weather, hourly=[{"name": "8P", "temp": 77}],
                             daily=[{"name": "MON", "temp": 80}])
@@ -2712,9 +2712,9 @@ def main():
         f"columns: shown={shown_w}px, hidden={hidden_w}px"
     )
 
-    # The 3-day forecast specifically must survive show_forecast=False --
+    # The 4-day forecast specifically must survive show_forecast=False --
     # dropping only "daily" from the same weather dict, at the same
-    # show_forecast=False, must measure narrower still, proving the 3-day
+    # show_forecast=False, must measure narrower still, proving the 4-day
     # columns were part of what was left in hidden_w above.
     no_daily_weather = dict(forecast_weather)
     del no_daily_weather["daily"]
@@ -2724,12 +2724,12 @@ def main():
         2, no_daily_weather, moon_font, moon_row_h,
         _dt(2026, 8, 12, 14, 0), show_forecast=False)
     assert hidden_no_daily_w < hidden_w, (
-        f"the 3-day forecast should still be present even with "
+        f"the 4-day forecast should still be present even with "
         f"show_forecast=False: with_daily={hidden_w}px, "
         f"without_daily={hidden_no_daily_w}px"
     )
     print(f"PASS  show_forecast=False hides the hourly forecast and moon "
-          f"phase but keeps current conditions and the 3-day forecast up "
+          f"phase but keeps current conditions and the 4-day forecast up "
           f"({shown_w}px -> {hidden_w}px)")
 
     # show_current=False hides the icon and plain current-temperature
@@ -2809,7 +2809,7 @@ def main():
 
     # The hourly ("NEXT HOURS") column has its own separate 6am-8pm cutoff,
     # unrelated to show_forecast -- an hour-by-hour forecast stops earning
-    # its place once it's mostly covering overnight. The 5-day forecast and
+    # its place once it's mostly covering overnight. The 4-day forecast and
     # moon phase are unaffected either way.
     #
     # Isolated as with-hourly-data minus without, at the *same* moment each
@@ -2860,7 +2860,7 @@ def main():
     )
     print(f"PASS  hourly forecast column only shows 6am-8pm "
           f"(contributes {day_delta}px by day, {night_delta}px overnight), "
-          f"5-day forecast and moon unaffected")
+          f"4-day forecast and moon unaffected")
 
     # Countdown: pure date arithmetic, recurring every year. Must roll over
     # to next year once this year's date has passed, and must not crash on
