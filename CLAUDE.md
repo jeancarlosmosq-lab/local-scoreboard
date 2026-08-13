@@ -78,6 +78,69 @@ plugin's own refresh logic is at fault; the plugin's own gates can be
 completely correct while a framework-level scheduling default overrides them
 invisibly.
 
+## The third most important thing: composing a rebuilt strip runs in its own process
+
+`strip_renderer.py`'s background rebuild (`_dispatch_background_build`)
+originally ran on a background *thread*. That was never actually free: a
+thread still shares the main process's GIL, and composing a rebuilt strip
+is real CPU-bound work (PIL drawing calls across a couple thousand
+pixels of content). No amount of throttling how *often* it ran (tried
+5s → 10s → 15s → 8s) fully fixed a small periodic pause in the scroll,
+because the underlying cost per rebuild never went away — only how often
+it was paid.
+
+Root-caused on the Pi with a direct measurement: a tight spin-loop
+"render thread" running concurrently with a background-thread compose
+lost ~17% of its throughput during that compose, and the SAME compose
+call, run in a genuinely separate OS process instead, brought that down
+to ~4% — and the compose itself went from over a second wall-clock
+(contending with the real matrix output) to under 150ms. `manager.py`
+now constructs the real `StripRenderer` with `use_process=True`, which
+routes composition to a persistent worker process (`_compose_worker_main`
+in `strip_renderer.py`) over a `multiprocessing.Pipe`, kept alive for the
+life of the service rather than spawned per rebuild.
+
+Three gotchas hit building this, all now handled but worth knowing if
+this code needs touching again:
+
+- **`Pipe`, not `Queue`.** `Queue.put()` defers pickling to its own
+  internal feeder thread — a request that fails to pickle (an unpicklable
+  object accidentally in the weather dict, say) is silently lost there,
+  and the response side then waits forever for a reply that was never
+  actually sent. `Connection.send()` (Pipe) pickles synchronously in the
+  calling thread, so a bad request raises right where it's sent and gets
+  caught the normal way. The response wait is also bounded (`conn.poll(20.0)`
+  before `conn.recv()`), so a worker that dies or hangs is eventually
+  reported as failed rather than blocking forever either way.
+- **`spawn`, not `fork`.** Linux defaults to `fork` for multiprocessing,
+  which inherits the parent's memory (and any already-open C-extension
+  state) directly. Forking a process that had already loaded PIL/FreeType
+  font resources left the *parent* process's own font loading broken
+  afterward — `OSError: cannot open resource` on a later, completely
+  unrelated `ImageFont.load_default()` call, in the parent, not the
+  child. `_ensure_compose_process` uses
+  `multiprocessing.get_context("spawn")` explicitly, which starts a
+  genuinely fresh interpreter with none of that inherited state, at the
+  one-time cost of a slower process start (paid once — the worker stays
+  alive for the service's whole session).
+- **Font objects can't cross the process boundary.** `_draw_clock`'s
+  `clock_state` includes a live `PIL.ImageFont.FreeTypeFont` object, used
+  by `refresh_clock()` to repaint the clock in place every frame.
+  Pickling that font in the worker and unpickling it in the parent raised
+  the same "cannot open resource" error, since `FreeTypeFont.__setstate__`
+  tries to reopen the font file in a context it wasn't loaded from. The
+  worker strips the font out of `clock_state` before sending (keeping
+  just the box and the clock text, both plain data); the parent resolves
+  an equivalent font itself via its own `_largest_fit` call, which is
+  deterministic given the same panel height, so it always picks the same
+  font file, just loaded fresh in its own process.
+
+`use_process` defaults to `False` — every `StripRenderer` in
+`test_offline.py` uses the original thread path unchanged, since spawning
+a real OS process per test instance would make the suite far slower for
+no benefit (nothing there is racing real matrix output for CPU). Only
+`manager.py`'s actual on-device instance opts in.
+
 ## Text positioning: always use `_text_top` / `_text_bottom` / `_vblock_start`
 
 Never call `draw.text((x, N), ...)` with a bare row number. This font
@@ -175,3 +238,18 @@ journalctl -u ledmatrix --since "1 minute ago" --no-pager
   (`_draw_countdown_icon` in `strip_renderer.py`) — a birthday/Christmas/
   school get a specific icon, anything else falls back to a plain star,
   since there is no fixed category list for free-text event names.
+- **`_draw_leaderboard` silently drops the 3rd ranked row on real
+  hardware.** Found running `test_offline.py` on the Pi directly for the
+  first time this session (it had only ever been run in the sandbox
+  before) — another instance of the sandbox-fonts-≠-real-fonts gap.
+  `max_rows = (self.height - self.MARGIN * 2) // use_row_h - 1` uses the
+  shared body font's row_h, which is sized to fit 4 rows across the
+  *whole* panel height (`self.height`, unmargined) — on real hardware
+  that's row_h=8, so 4 rows is exactly 32px with zero room for the 1px
+  top/bottom margin every other segment reserves, and the row-count cap
+  correctly (by its own arithmetic) backs off to 2 ranked rows instead of
+  3 rather than clip. Not touched this session — found while verifying
+  an unrelated fix, and fixing it properly means reconsidering the
+  shared font's own sizing (`self._fit_font(draw, 4, self.height)`),
+  which every other segment on the strip also uses, not just a
+  leaderboard-local change.

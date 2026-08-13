@@ -24,6 +24,7 @@ ruinous on a Pi that is also driving the matrix.
 
 import logging
 import math
+import multiprocessing
 import os
 import threading
 import time
@@ -42,6 +43,74 @@ except ImportError:  # pragma: no cover
 
 
 MIN_LEGIBLE_ROW_H = 6
+
+
+def _compose_worker_main(conn, width: int, height: int,
+                         allow_download: bool) -> None:
+    """Runs in a separate OS process, not a thread.
+
+    A background *thread* still shares the main process's GIL -- composing
+    a rebuilt strip is real CPU-bound work (PIL drawing calls), and a
+    thread doing that work still starves the main thread of GIL time to
+    run its own Python bytecode, confirmed on the Pi as a periodic pause
+    in the scroll no amount of throttling or caching fully removed,
+    because the underlying cost never went away, only how often it was
+    paid. A separate process has its own interpreter and its own GIL, so
+    composing here genuinely cannot block the render loop's own thread the
+    way a background thread could -- only real OS-level CPU contention
+    remains, which the matrix's own isolated core (isolcpus) is already
+    set up to be shielded from.
+
+    Owns its own StripRenderer and TeamLogoManager -- fully independent of
+    the caller's, including its own font/logo caches, warmed the same way
+    over the life of the process. teams/logo cache_dir default to the
+    same on-disk locations _compose_strip already resolves relative to
+    this same file, so nothing needs to cross the process boundary except
+    plain, already-picklable request data (dicts, lists, a datetime) in,
+    and a PIL Image plus the clock-state tuple back -- over a Pipe, not a
+    Queue; see the comment by self._compose_conn for why.
+    """
+    from logo_manager import TeamLogoManager
+
+    worker_logger = logging.getLogger("strip_compose_worker")
+
+    class _WorkerDisplay:
+        def __init__(self, w, h):
+            self.width = w
+            self.height = h
+
+    logos = TeamLogoManager(worker_logger, allow_download=allow_download)
+    renderer = StripRenderer(
+        _WorkerDisplay(width, height), {}, worker_logger, logo_manager=logos)
+
+    while True:
+        try:
+            request = conn.recv()
+        except (EOFError, OSError):
+            return
+        if request is None:
+            return
+        try:
+            strip, clock_state = renderer._compose_strip(*request)
+            if clock_state is not None:
+                # The font object in the middle of clock_state can't
+                # safely cross a process boundary -- confirmed the hard
+                # way, pickling a PIL FreeTypeFont here and unpickling it
+                # in the parent raised "cannot open resource" trying to
+                # reopen the font file from within a context that isn't
+                # this worker's own. The parent resolves an equivalent
+                # font itself instead (same panel height, same
+                # _largest_fit call, same font file -- deterministically
+                # the same result), so only the box and the clock text,
+                # both plain data, need to make the trip.
+                box, _font, clock_text = clock_state
+                clock_state = (box, None, clock_text)
+            conn.send(("ok", strip, clock_state))
+        except Exception as e:
+            worker_logger.error(
+                "Background strip compose failed in worker process: %s",
+                e, exc_info=True)
+            conn.send(("error", str(e), None))
 
 
 class StripRenderer:
@@ -101,11 +170,32 @@ class StripRenderer:
     OUT_OFF = (55, 25, 20)
 
     def __init__(self, display_manager, config: Dict[str, Any],
-                 logger: logging.Logger, logo_manager=None):
+                 logger: logging.Logger, logo_manager=None,
+                 use_process: bool = False):
         self.display_manager = display_manager
         self.config = config or {}
         self.logger = logger
         self.logo_manager = logo_manager
+        # Off by default -- every existing caller (all of test_offline.py
+        # included) gets the original thread-based background build
+        # unchanged. manager.py opts the real, on-device renderer in;
+        # spawning an OS process per StripRenderer instance would make the
+        # test suite (which constructs dozens of them) far slower for no
+        # benefit, since nothing there is racing the real matrix output
+        # for CPU. See _compose_worker_main's own docstring for why a
+        # process, not just a thread, is what this actually needs.
+        self._use_process = use_process
+        self._compose_process: Optional[multiprocessing.Process] = None
+        # A Pipe, not a Queue -- Connection.send() pickles synchronously
+        # in the calling thread, so a request that can't be pickled (a
+        # stray lambda or lock ending up in the weather dict, say) raises
+        # right there and is caught the same way any other dispatch
+        # failure is. Queue.put() defers pickling to its own internal
+        # feeder thread instead; a pickling failure there is silently
+        # lost, and the response side would then wait forever for an
+        # answer to a request the worker never actually received --
+        # confirmed the hard way, once, before switching to Pipe.
+        self._compose_conn = None
 
         try:
             self.width = display_manager.matrix.width
@@ -1814,6 +1904,44 @@ class StripRenderer:
             )
         return self._strip_cache
 
+    def _ensure_compose_process(self) -> None:
+        """Lazily start the persistent worker process, once, the first
+        time a process-backed background build is actually needed.
+
+        Not started eagerly in __init__: most StripRenderer instances
+        (every one test_offline.py creates) never opt into use_process at
+        all, and even the ones that do don't need a live worker until the
+        first real background dispatch.
+
+        Uses the "spawn" start method explicitly, not the platform
+        default ("fork" on Linux) -- confirmed the hard way: forking a
+        process that has already loaded PIL/FreeType font resources left
+        the *parent* process's own font loading broken afterward
+        ("OSError: cannot open resource" on a later, unrelated
+        ImageFont.load_default() call), a known class of gotcha where a
+        fork inherits a C extension's internal file handles/state in a
+        way that isn't safe to use from either side afterward. spawn
+        starts a genuinely fresh interpreter with none of that inherited
+        state, at the one-time cost of a slower process start -- paid
+        once, since the worker is kept alive for the life of the service.
+        """
+        if self._compose_process is not None and self._compose_process.is_alive():
+            return
+        ctx = multiprocessing.get_context("spawn")
+        self._compose_conn, child_conn = ctx.Pipe()
+        allow_download = bool(
+            self.logo_manager and getattr(self.logo_manager, "allow_download", True)
+        )
+        self._compose_process = ctx.Process(
+            target=_compose_worker_main,
+            args=(child_conn, self.width, self.height, allow_download),
+            daemon=True, name="strip-compose-worker",
+        )
+        self._compose_process.start()
+        # The child has its own copy (duplicated across fork); this
+        # process only ever talks over self._compose_conn, the other end.
+        child_conn.close()
+
     def _dispatch_background_build(self, signature, teams_and_games,
                                     start_labels, leaderboards, weather,
                                     clock, awards, other_live, team_mvps,
@@ -1821,12 +1949,92 @@ class StripRenderer:
                                     weather_show_forecast=True,
                                     show_clock=True,
                                     weather_show_current=True) -> None:
-        """Compose the next strip off the render thread, so the scroll
+        """Compose the next strip off the render path, so the scroll
         never waits on it -- only the finished image, swapped in at
         adopt_pending()'s next seam, is ever shared back with the caller.
+
+        use_process routes this to a separate OS process instead of a
+        background thread -- see _compose_worker_main's own docstring for
+        why a thread alone wasn't enough. Either way, self._build_thread
+        ends up holding whatever _wait_for_background_build() should join:
+        the thread doing the compose itself, or (use_process) a thin
+        watcher thread that just blocks on the worker's response queue,
+        which is I/O wait, not CPU work, so it costs nothing to have
+        running.
         """
         self._dispatched_signature = signature
         self._last_build = time.time()
+
+        def _finish(strip, clock_state) -> None:
+            with self._build_lock:
+                self._pending_key = signature
+                self._pending = strip
+                # Held alongside _pending rather than applied to
+                # self._clock_box now -- this runs off the render thread,
+                # while self._strip_cache (what refresh_clock() is still
+                # repainting every frame) is the *previous* build until
+                # adopt_pending() swaps them together.
+                self._pending_clock_state = clock_state
+                if self._dispatched_signature == signature:
+                    self._dispatched_signature = None
+
+        def _fail(context: str, exc_info=None) -> None:
+            self.logger.error(
+                "Background strip build failed (%s)", context, exc_info=exc_info)
+            with self._build_lock:
+                if self._dispatched_signature == signature:
+                    self._dispatched_signature = None
+
+        if self._use_process:
+            self._ensure_compose_process()
+            conn = self._compose_conn
+            request = (
+                teams_and_games, start_labels, leaderboards, weather, clock,
+                awards, other_live, team_mvps, countdowns, streaks,
+                weather_show_forecast, show_clock, weather_show_current,
+            )
+
+            def _watch() -> None:
+                try:
+                    conn.send(request)
+                except Exception:
+                    _fail("sending request to worker process", exc_info=True)
+                    return
+                # Bounded, not conn.recv() outright -- a worker that died,
+                # hung, or never received a request that failed to
+                # pickle partway through must eventually be reported as
+                # failed rather than leaving this renderer waiting on a
+                # reply that is never coming.
+                if not conn.poll(20.0):
+                    _fail("worker process timed out")
+                    return
+                try:
+                    status, payload, clock_state = conn.recv()
+                except Exception:
+                    _fail("reading response from worker process", exc_info=True)
+                    return
+                if status == "ok":
+                    if clock_state is not None:
+                        # The worker sent the box and clock text but not
+                        # the font object itself -- see its own comment
+                        # for why. Resolved fresh, in this process: same
+                        # panel height, same _largest_fit call, so
+                        # deterministically the same font file the worker
+                        # used, just loaded (and cached) here instead.
+                        box, _missing_font, clock_text = clock_state
+                        probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+                        local_font, _ = self._largest_fit(
+                            probe, 2, self.height - self.MARGIN * 2)
+                        clock_state = (box, local_font, clock_text)
+                    _finish(payload, clock_state)
+                else:
+                    _fail(f"worker reported: {payload}")
+
+            thread = threading.Thread(target=_watch, daemon=True,
+                                      name="strip-build-watch")
+            self._build_thread = thread
+            thread.start()
+            return
 
         def _run() -> None:
             try:
@@ -1836,23 +2044,9 @@ class StripRenderer:
                     weather_show_forecast, show_clock, weather_show_current,
                 )
             except Exception:
-                self.logger.error(
-                    "Background strip build failed", exc_info=True)
-                with self._build_lock:
-                    if self._dispatched_signature == signature:
-                        self._dispatched_signature = None
+                _fail("thread", exc_info=True)
                 return
-            with self._build_lock:
-                self._pending_key = signature
-                self._pending = strip
-                # Held alongside _pending rather than applied to
-                # self._clock_box now -- this runs on the background
-                # thread, while self._strip_cache (what refresh_clock()
-                # is still repainting every frame) is the *previous*
-                # build until adopt_pending() swaps them together.
-                self._pending_clock_state = clock_state
-                if self._dispatched_signature == signature:
-                    self._dispatched_signature = None
+            _finish(strip, clock_state)
 
         thread = threading.Thread(target=_run, daemon=True,
                                   name="strip-build")
@@ -2098,6 +2292,26 @@ class StripRenderer:
 
     def has_pending(self) -> bool:
         return self._pending is not None
+
+    def close(self) -> None:
+        """Stop the compose worker process, if one was ever started.
+
+        daemon=True already guarantees it doesn't outlive this process
+        (same as the background thread already relied on), but an
+        explicit stop here means a plugin disable/reload doesn't leave a
+        worker sitting idle until the whole service eventually restarts.
+        Safe to call whether or not use_process was ever on, or a worker
+        was ever actually needed.
+        """
+        if self._compose_process is not None and self._compose_process.is_alive():
+            try:
+                if self._compose_conn is not None:
+                    self._compose_conn.send(None)
+            except Exception:
+                pass
+            self._compose_process.join(2.0)
+            if self._compose_process.is_alive():
+                self._compose_process.terminate()
 
     def scroll_span(self, strip: Image.Image) -> int:
         """Pixels to travel for one full pass.

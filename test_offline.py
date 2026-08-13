@@ -1218,6 +1218,102 @@ def main():
     print("PASS  a signature already being built in the background is not "
           "dispatched a second time")
 
+    # use_process=True: composing runs in a genuinely separate OS process
+    # instead of a background thread sharing this one's GIL -- the fix
+    # for a periodic scroll pause that throttling and caching alone
+    # couldn't fully remove, since the underlying compose cost never
+    # went away, only how often it was paid. Off by default (every
+    # StripRenderer above this point used the thread path unchanged);
+    # only manager.py's real, on-device instance opts in. First build
+    # stays synchronous either way -- nothing to keep showing yet.
+    dproc = FakeDisplay(192, 32)
+    rproc = StripRenderer(dproc, {}, log, use_process=True)
+    assert rproc._compose_process is None, (
+        "the worker process must not start until the first background "
+        "dispatch actually needs one"
+    )
+    proc_team = {"abbr": "NYY", "league": "mlb", "name": "Yankees"}
+    proc_game = {"id": "pw1", "league": "mlb", "state": STATE_LIVE, "start": "",
+                "away": {"abbr": "BOS", "score": "2"},
+                "home": {"abbr": "NYY", "score": "3"},
+                "situation": {"kind": "baseball", "balls": 0, "strikes": 0,
+                              "outs": 0}, "leaders": []}
+    first = rproc.build_strip([(proc_team, [proc_game])])
+    assert first is not None, "first (synchronous) build failed"
+    assert rproc._compose_process is None, (
+        "the synchronous first build must not need the worker process either"
+    )
+
+    rproc._last_build = 0.0
+    moved_proc = dict(proc_game, situation=dict(proc_game["situation"], balls=2))
+    still_showing = rproc.build_strip([(proc_team, [moved_proc])])
+    assert still_showing is not None, (
+        "dispatching a process-backed background build must not block "
+        "the caller"
+    )
+    assert rproc._compose_process is not None and rproc._compose_process.is_alive(), (
+        "the worker process should be running once a background build "
+        "has actually been dispatched"
+    )
+    assert rproc._wait_for_background_build(timeout=10), (
+        "process-backed background build did not finish"
+    )
+    assert rproc.has_pending(), "worker process did not deliver a pending strip"
+    assert rproc.adopt_pending(), "failed to adopt the worker's own strip"
+    print("PASS  use_process=True composes in a separate OS process, "
+          "started lazily on the first background dispatch")
+
+    # A worker-side failure must be caught the same way a thread-side one
+    # is -- an unpicklable value in the request is a reliable way to
+    # force a real failure at the process boundary itself (pickling
+    # happens synchronously in put(), before anything reaches the
+    # worker), without needing to reach into a separate process's own
+    # internals to break it.
+    dproc2 = FakeDisplay(192, 32)
+    rproc2 = StripRenderer(dproc2, {}, log, use_process=True)
+    rproc2.build_strip([(proc_team, [proc_game])])  # first build, synchronous
+    rproc2._last_build = 0.0
+    unpicklable_weather = {"now_temp": 75, "units": "F",
+                           "callback": lambda: None}
+    moved_proc2 = dict(proc_game, situation=dict(proc_game["situation"], balls=3))
+    still_showing2 = rproc2.build_strip(
+        [(proc_team, [moved_proc2])], weather=unpicklable_weather)
+    assert still_showing2 is not None, (
+        "a worker-process dispatch failure should not crash the caller"
+    )
+    assert rproc2._wait_for_background_build(timeout=10), (
+        "background build did not finish"
+    )
+    assert not rproc2.has_pending(), (
+        "a failed worker dispatch should not leave a bogus pending strip"
+    )
+    assert rproc2._dispatched_signature is None, (
+        "a failed worker dispatch must clear the in-flight marker"
+    )
+    print("PASS  a worker-process compose failure is also caught cleanly, "
+          "same as a thread-side one")
+
+    # close() stops the worker cleanly on a plugin disable/reload, rather
+    # than relying purely on daemon=True to clean it up whenever the
+    # whole service eventually restarts. Safe to call whether or not a
+    # worker was ever actually started.
+    dproc3 = FakeDisplay(192, 32)
+    rproc3 = StripRenderer(dproc3, {}, log, use_process=True)
+    rproc3.close()  # no worker ever started -- must not raise
+    rproc3.build_strip([(proc_team, [proc_game])])
+    rproc3._last_build = 0.0
+    moved_proc3 = dict(proc_game, situation=dict(proc_game["situation"], balls=1))
+    rproc3.build_strip([(proc_team, [moved_proc3])])
+    assert rproc3._wait_for_background_build(timeout=10)
+    worker = rproc3._compose_process
+    assert worker is not None and worker.is_alive(), (
+        "test setup error: expected a live worker process to close"
+    )
+    rproc3.close()
+    worker.join(3.0)
+    assert not worker.is_alive(), "close() should stop the worker process"
+    print("PASS  close() stops the worker process cleanly")
+
     # Composing a strip costs tens of milliseconds; build_strip runs on the
     # render path, so instability in the data must not be able to rebuild it
     # every frame. That is what freezes the scroll.

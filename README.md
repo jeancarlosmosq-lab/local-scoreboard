@@ -79,7 +79,7 @@ The same ESPN endpoint shape serves baseball, basketball and football, which is 
 
 Refresh cadence follows the games: **~5 seconds** while any game is live -- a followed team's own, or one elsewhere in the league -- or a followed team's game is about to start, **~60 seconds** otherwise (both configurable). A final from last night doesn't change; a game in progress changes every pitch or possession. Finals have their notable players fetched once and remembered, since a completed box score is settled. Win/loss streaks come from ESPN's own league standings, refreshed every 5 minutes.
 
-That 5-second data refresh reaches the panel quickly too: a live game's own score, count or batter changing is adopted onto the strip as soon as the next rebuild is ready, rather than waiting for the current scroll pass to finish -- on a long strip a full pass can take minutes, which is far too slow for an at-bat. The rebuild itself is capped a little slower than the data (every ~8 seconds, not 5) on purpose: composing a new image is real CPU work -- confirmed on a Pi at tens of milliseconds per rebuild even with font metrics cached -- and running it as often as the data itself refreshes measurably competed with the matrix output for CPU, visible as a small periodic pause in the scroll once any live game elsewhere kept the fast data cadence on for long stretches of the day. Worst case, a live score is ~13 seconds old on screen (5s data + 8s rebuild cap); typical case is closer to half that.
+That 5-second data refresh reaches the panel quickly too: a live game's own score, count or batter changing is adopted onto the strip as soon as the next rebuild is ready, rather than waiting for the current scroll pass to finish -- on a long strip a full pass can take minutes, which is far too slow for an at-bat. Composing a rebuilt strip runs in its own OS process, not just a background thread -- a thread still shares the main process's GIL, and on a Pi, composing there was measurably starving the render loop's own thread of CPU time regardless of how the rebuild throttle was tuned, visible as a small periodic pause in the scroll. Confirmed on-device: the same rebuild took over a second on a background thread contending with the live matrix output, and under 150ms in a separate process. The rebuild throttle stays at ~8 seconds (a live score is ~13 seconds old on screen worst case, typically closer to half that) -- now mostly headroom rather than the only lever holding the pause back.
 
 ## Configuration
 
@@ -126,4 +126,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.48.0
+0.49.0

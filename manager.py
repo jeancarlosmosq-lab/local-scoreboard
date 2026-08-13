@@ -284,6 +284,14 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self.strip = StripRenderer(
             display_manager=self.display_manager, config=self.config,
             logger=self.logger, logo_manager=self.logos,
+            # A background *thread* still shares this process's GIL, so
+            # composing a rebuilt strip there still measurably starved the
+            # real render loop of its own CPU time -- confirmed on the Pi
+            # as a periodic scroll pause no amount of throttling or
+            # caching fully removed. A separate process has its own GIL,
+            # so it genuinely cannot block this one's bytecode the way a
+            # thread could. See _compose_worker_main's own docstring.
+            use_process=True,
         )
         self.weather = (
             NWSWeather(
@@ -1103,3 +1111,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                     session.close()
         except Exception as e:
             self.logger.debug("Cleanup error: %s", e)
+        try:
+            if self.strip:
+                self.strip.close()
+        except Exception as e:
+            self.logger.debug("Cleanup error (strip worker): %s", e)

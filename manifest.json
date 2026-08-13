@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.48.0",
+  "version": "0.49.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.49.0",
+      "released": "2026-08-13",
+      "notes": "Composing a rebuilt strip now runs in its own OS process instead of a background thread. A thread still shares the main process's GIL -- no amount of throttling how often composition ran (tried 5s, 10s, 15s, 8s) fully removed a small periodic scroll pause, because the underlying CPU cost of a rebuild never went away, only how often it was paid. Measured directly on the Pi: a background-thread rebuild took over a second wall-clock while contending with the live matrix output; the identical rebuild in a separate process took under 150ms, and a concurrent render-thread's own throughput loss during composition dropped from ~17% to ~4%. The worker process is spawned lazily and kept alive for the service's whole session, communicating over a Pipe rather than a Queue (so a malformed request fails loudly instead of hanging forever) using the 'spawn' start method rather than the platform default 'fork' (which corrupted the parent's own font loading after forking a process with fonts already loaded). Off by default -- only the real, on-device renderer opts in; nothing changes for anyone testing or developing against the thread-based path."
+    },
     {
       "version": "0.48.0",
       "released": "2026-08-13",
