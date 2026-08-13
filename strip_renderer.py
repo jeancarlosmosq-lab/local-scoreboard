@@ -124,6 +124,11 @@ class StripRenderer:
         # is only ever adopted while it is off-screen.
         self._pending: Optional[Image.Image] = None
         self._pending_key = None
+        # Travels with _pending, applied to the live _clock_box/_clock_font/
+        # _clock_shown only at the same moment adopt_pending() swaps the
+        # image itself in -- see _draw_clock's own comment for why this
+        # can't just be written during composition.
+        self._pending_clock_state = None
         # Composing the strip costs tens of milliseconds -- hundreds on a Pi
         # driving a matrix -- so it must never be able to happen every frame.
         # build_strip is called from the render path, and any instability in
@@ -1057,6 +1062,12 @@ class StripRenderer:
         (weather.hide_forecast_when_live in config, opt-in per install) --
         the original design kept the whole block up during a live game on
         purpose, and this only overrides that for whoever turns it on.
+
+        The hourly column has its own separate cutoff on top of that,
+        6am-8pm only, read from `when` -- unlike show_forecast this one is
+        not configurable, since it is a fixed daily rhythm rather than a
+        per-install preference. The 5-day forecast and moon phase are not
+        affected by it.
         """
         if not weather:
             return 0
@@ -1132,8 +1143,14 @@ class StripRenderer:
         forecast_content_top = self.MARGIN + row_h + 1
 
         # --- next hours ---------------------------------------------------
+        # Shown 6am-8pm only. An hour-by-hour forecast is for deciding what
+        # to do with the rest of today; overnight it's the 5-day forecast
+        # that's still useful, not tonight's hourly, which by 8pm is mostly
+        # "asleep" anyway. Fails open (shows) when there's no clock to read
+        # an hour from, the same as every other clock-optional path here.
+        daytime = when is None or 6 <= when.hour < 20
         hourly = [h for h in (weather.get("hourly") or []) if h.get("temp") is not None]
-        if show_forecast and hourly:
+        if show_forecast and daytime and hourly:
             x += self._draw_divider(img, draw, x)
             draw.text((x, self._text_top(draw, font, self.MARGIN)),
                       "NEXT HOURS", font=font, fill=self.DIM)
@@ -1437,7 +1454,7 @@ class StripRenderer:
     # ------------------------------------------------------------------
     # Strip
     # ------------------------------------------------------------------
-    def _draw_clock(self, img, draw, x: int, now, font, row_h: int) -> int:
+    def _draw_clock(self, img, draw, x: int, now, font, row_h: int):
         """Time and date at the head of the strip, as large as two rows allow.
 
         The shared body font is sized to fit four rows -- a leaderboard's
@@ -1479,10 +1496,21 @@ class StripRenderer:
                       fill=self.DIM)
             width = max(width, self._measure(draw, date, big_font)[0])
 
-        self._clock_box = (start, top, width, big_row_h)
-        self._clock_font = big_font
-        self._clock_shown = clock
-        return width + 8
+        # Returned rather than written to self directly -- this can run on
+        # the background build thread (_compose_strip's docstring explains
+        # why), and self._clock_box is what refresh_clock() reads against
+        # self._strip_cache on the render thread. Writing it here, before
+        # this composition has even been adopted, let a still-visible old
+        # strip's clock repaint at a *new* build's box position -- mostly
+        # harmless while the clock always drew at the same fixed spot, but
+        # this box can now also disappear/reappear (show_clock), and
+        # repainting at a position from a build the screen isn't showing
+        # yet is a real corruption risk, not just a stale-until-next-frame
+        # one. The caller threads this through _pending and only applies
+        # it to self._clock_box at the same moment adopt_pending() swaps
+        # the image itself in.
+        clock_state = ((start, top, width, big_row_h), big_font, clock)
+        return width + 8, clock_state
 
     def _draw_clock_face(self, draw, x: int, y: int, text: str, font,
                          fill) -> int:
@@ -1553,7 +1581,7 @@ class StripRenderer:
     def build_strip(self, teams_and_games, start_labels=None, leaderboards=None,
                     weather=None, clock=None, awards=None,
                     other_live=None, team_mvps=None, countdowns=None,
-                    streaks=None, weather_show_forecast=True):
+                    streaks=None, weather_show_forecast=True, show_clock=True):
         """One continuous strip across every team.
 
         A single image rather than one per team: the board then scrolls
@@ -1571,7 +1599,15 @@ class StripRenderer:
                                  for r in entry[1]))
                 for entry in (leaderboards or [])
             ),
-            bool(clock),
+            # The hour, not the full timestamp -- the visible clock digits
+            # repaint separately via refresh_clock() without a full rebuild,
+            # so the signature deliberately ignores most of a clock change.
+            # The hour is the exception: it is what the hourly-forecast
+            # day/night cutoff below reads, and without it in here a rebuild
+            # would only happen to land on that boundary by coincidence,
+            # whenever something else (weather's own refetch, a score)
+            # happened to trigger one anyway.
+            (bool(clock), clock.hour if clock else None, bool(show_clock)),
             tuple(
                 (entry[0], tuple((r.get("rank"), r.get("short_name"),
                                   r.get("value")) for r in entry[1]))
@@ -1617,13 +1653,16 @@ class StripRenderer:
         if self._strip_cache is None:
             # Nothing on screen yet, so nothing to keep showing while a
             # background build runs -- block once, here, at startup.
-            strip = self._compose_strip(
+            strip, clock_state = self._compose_strip(
                 teams_and_games, start_labels, leaderboards, weather, clock,
                 awards, other_live, team_mvps, countdowns, streaks,
-                weather_show_forecast,
+                weather_show_forecast, show_clock,
             )
             self._strip_key = signature
             self._strip_cache = strip
+            self._clock_box, self._clock_font, self._clock_shown = (
+                clock_state if clock_state else (None, None, None)
+            )
             self._last_build = time.time()
             return strip
 
@@ -1639,7 +1678,7 @@ class StripRenderer:
             self._dispatch_background_build(
                 signature, teams_and_games, start_labels, leaderboards,
                 weather, clock, awards, other_live, team_mvps, countdowns,
-                streaks, weather_show_forecast,
+                streaks, weather_show_forecast, show_clock,
             )
         return self._strip_cache
 
@@ -1647,7 +1686,8 @@ class StripRenderer:
                                     start_labels, leaderboards, weather,
                                     clock, awards, other_live, team_mvps,
                                     countdowns, streaks,
-                                    weather_show_forecast=True) -> None:
+                                    weather_show_forecast=True,
+                                    show_clock=True) -> None:
         """Compose the next strip off the render thread, so the scroll
         never waits on it -- only the finished image, swapped in at
         adopt_pending()'s next seam, is ever shared back with the caller.
@@ -1657,10 +1697,10 @@ class StripRenderer:
 
         def _run() -> None:
             try:
-                strip = self._compose_strip(
+                strip, clock_state = self._compose_strip(
                     teams_and_games, start_labels, leaderboards, weather,
                     clock, awards, other_live, team_mvps, countdowns, streaks,
-                    weather_show_forecast,
+                    weather_show_forecast, show_clock,
                 )
             except Exception:
                 self.logger.error(
@@ -1672,6 +1712,12 @@ class StripRenderer:
             with self._build_lock:
                 self._pending_key = signature
                 self._pending = strip
+                # Held alongside _pending rather than applied to
+                # self._clock_box now -- this runs on the background
+                # thread, while self._strip_cache (what refresh_clock()
+                # is still repainting every frame) is the *previous*
+                # build until adopt_pending() swaps them together.
+                self._pending_clock_state = clock_state
                 if self._dispatched_signature == signature:
                     self._dispatched_signature = None
 
@@ -1697,12 +1743,18 @@ class StripRenderer:
     def _compose_strip(self, teams_and_games, start_labels, leaderboards,
                        weather, clock, awards, other_live, team_mvps,
                        countdowns, streaks,
-                       weather_show_forecast: bool = True) -> Image.Image:
+                       weather_show_forecast: bool = True,
+                       show_clock: bool = True):
         """The actual drawing work -- tens of milliseconds, hundreds on a
         Pi. Safe to run off the main thread: everything it touches is
         either local to this call (the scratch canvas, its font) or the
         caller's own already-built data for this one signature, never
         self._strip_cache/_pending directly.
+
+        Returns (image, clock_state) -- clock_state is whatever _draw_clock
+        produced (or None), for the caller to apply to the live clock
+        attributes only once this composition is actually adopted, not
+        during composition itself.
         """
         start_labels = start_labels or {}
 
@@ -1736,8 +1788,10 @@ class StripRenderer:
         # read as a gap rather than a deliberate boundary.
         x = 4
         x += self._draw_divider(scratch, draw, x)
-        if clock is not None:
-            x += self._draw_clock(scratch, draw, x, clock, font, row_h)
+        clock_state = None
+        if clock is not None and show_clock:
+            added, clock_state = self._draw_clock(scratch, draw, x, clock, font, row_h)
+            x += added
             x += self._draw_divider(scratch, draw, x)
 
         if weather:
@@ -1867,7 +1921,7 @@ class StripRenderer:
         # the strip wraps, and a floor of one panel so a short strip still
         # fills the screen.
         x = min(x + 12, scratch.width)
-        return scratch.crop((0, 0, max(self.width, x), self.height))
+        return scratch.crop((0, 0, max(self.width, x), self.height)), clock_state
 
     def set_static_panel(self, panel) -> None:
         """Fix a card to the left module, or clear it with None."""
@@ -1892,8 +1946,13 @@ class StripRenderer:
                 return False
             self._strip_cache = self._pending
             self._strip_key = self._pending_key
+            self._clock_box, self._clock_font, self._clock_shown = (
+                self._pending_clock_state if self._pending_clock_state
+                else (None, None, None)
+            )
             self._pending = None
             self._pending_key = None
+            self._pending_clock_state = None
             return True
 
     def has_pending(self) -> bool:

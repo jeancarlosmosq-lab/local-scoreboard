@@ -734,7 +734,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         return out
 
     @staticmethod
-    def _live_signature(teams_and_games, other_live) -> tuple:
+    def _live_signature(teams_and_games, other_live, panel_game=None) -> tuple:
         """A fingerprint of every currently-live game's own score and
         situation -- balls, strikes, outs, down and distance, clock, the
         leader lines ESPN attaches. Anything that changes what a viewer
@@ -746,6 +746,17 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         frame would call almost every refresh "urgent". This narrows to
         just what a live game means by "updated every 5 seconds" -- the
         game itself, not the strip around it.
+
+        panel_game is passed separately and deliberately: _display_strip()
+        excludes a followed team's own live game from teams_and_games once
+        it's pinned to the static panel, so showing it twice doesn't waste
+        the scroll -- but that exclusion also made it invisible here,
+        which meant the single most common live-game case (your own
+        followed team, pinned) never counted as a change at all. Its own
+        panel repaints every frame regardless of the scroll, so this
+        wasn't a stale-panel bug, but it did mean show_clock's own
+        transition, and any_live's leaderboard/awards/countdown hide,
+        still wasn't reaching the scroll until the next natural seam.
         """
         def fingerprint(g):
             situation = g.get("situation") or {}
@@ -759,13 +770,15 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 tuple(l.get("line", "") for l in (g.get("leaders") or [])),
             )
 
-        followed = tuple(sorted(
+        followed = [
             fingerprint(g)
             for _, games in teams_and_games for g in games
             if g.get("state") == STATE_LIVE
-        ))
+        ]
+        if panel_game is not None:
+            followed.append(fingerprint(panel_game))
         other = tuple(sorted(fingerprint(g) for g in (other_live or [])))
-        return (followed, other)
+        return (tuple(sorted(followed)), other)
 
     def _display_strip(self) -> bool:
         """Scroll one continuous strip carrying every team, and wrap.
@@ -847,12 +860,20 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         )
         streaks = self._streaks()
 
-        live_signature = self._live_signature(teams_and_games, other_live)
+        live_signature = self._live_signature(
+            teams_and_games, other_live, panel_game)
         if (self._last_live_signature is not None
                 and live_signature != self._last_live_signature):
             self._urgent_adopt = True
         self._last_live_signature = live_signature
 
+        # The clock only belongs in the scroll when it isn't already
+        # pinned to the left module -- showing it in both places at once
+        # is the same time twice. It's pinned there whenever nothing live
+        # has taken that spot over (see render_clock_weather_panel above),
+        # so the scroll only needs its own copy while a live game has
+        # bumped the clock out of the static slot.
+        show_clock = panel_game is not None
         built = self.strip.build_strip(
             teams_and_games, labels, leaderboards=boards, awards=awards,
             weather=self._weather_data,
@@ -862,6 +883,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             countdowns=countdown_events,
             streaks=streaks,
             weather_show_forecast=weather_show_forecast,
+            show_clock=show_clock,
         )
         if built is None:
             return False
@@ -909,6 +931,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                     countdowns=countdown_events,
                     streaks=streaks,
                     weather_show_forecast=weather_show_forecast,
+                    show_clock=show_clock,
                 )
                 self._scroll_offset = 0.0
                 self.logger.debug(
@@ -950,6 +973,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 self.games.other_live_games(self.teams_other_live_limit)
                 if self.teams_other_live_on else []
             )
+            panel_game, _ = self._panel_game()
             built = (self.strip.build_strip(
                 pairs, leaderboards=boards, awards=awards,
                 weather=self._weather_data,
@@ -958,7 +982,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 team_mvps=self._team_mvps(),
                 countdowns=countdown_events,
                 streaks=self._streaks(),
-                weather_show_forecast=weather_show_forecast) if pairs else None)
+                weather_show_forecast=weather_show_forecast,
+                show_clock=panel_game is not None) if pairs else None)
             if built is None:
                 return None
             speed = max(1.0, self.teams_scroll_speed)

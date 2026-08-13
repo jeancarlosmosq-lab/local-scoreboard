@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.41.0",
+  "version": "0.42.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.42.0",
+      "released": "2026-08-12",
+      "notes": "The scroll no longer carries its own clock while the static panel is already showing one (nothing live, clock/weather fallback pinned there) -- it only earns its place once a live game has taken that slot over. Hourly forecast now only shows 6am-8pm, day/night gated regardless of the existing weather.hide_forecast_when_live setting; the 5-day forecast and moon phase are unaffected. Also fixed a gap in the live-update-adoption work from the previous release: a followed team's own live game, once pinned to the static panel, was excluded from the fingerprint that decides whether a live-state change needs an out-of-turn adopt -- the single most common live-game case never registered as a change at all, so leaderboards/awards/countdowns hiding and the clock joining the scroll still silently waited for the scroll's next full lap in exactly that case. Fixed a related pre-existing latent bug found while building this: the clock's on-screen position was being written to shared state from the background composition thread before that composition was actually adopted, which was harmless while the clock always drew at the same fixed spot but became a real corruption risk once it could disappear and reappear -- it's now threaded through the same pending/adopt handoff as the rest of a rebuilt strip."
+    },
     {
       "version": "0.41.0",
       "released": "2026-08-12",

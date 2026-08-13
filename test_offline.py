@@ -1395,6 +1395,35 @@ def main():
     assert rclock._clock_shown == unchanged
     print(f"PASS  clock repaints in place ({first_text} -> {rclock._clock_shown})")
 
+    # show_clock=False drops the clock from the scroll entirely -- the
+    # scroll's own copy only earns its place when the static panel isn't
+    # already showing the time (a live game having bumped the clock out of
+    # that slot); otherwise it's the same clock shown twice. Measured on
+    # real leaderboard content, since an empty strip floors to a fixed
+    # minimum width regardless of the clock, which would mask the
+    # difference.
+    clock_rows = [{"rank": 1, "short_name": "A.JUDGE", "team": "NYY", "value": "35"}]
+    dnoclock = FakeDisplay(192, 32)
+    rnoclock = StripRenderer(dnoclock, {}, log)
+    shown = rnoclock.build_strip(
+        [], leaderboards=[("AL HR LEADERS", clock_rows, "HR")],
+        clock=_clock_dt(2026, 8, 9, 19, 5), show_clock=True)
+    assert rnoclock._clock_box, "clock position should be recorded when shown"
+
+    rnoclock2 = StripRenderer(FakeDisplay(192, 32), {}, log)
+    hidden = rnoclock2.build_strip(
+        [], leaderboards=[("AL HR LEADERS", clock_rows, "HR")],
+        clock=_clock_dt(2026, 8, 9, 19, 5), show_clock=False)
+    assert not rnoclock2._clock_box, (
+        "no clock position should be recorded when show_clock is False"
+    )
+    assert hidden.width < shown.width, (
+        f"show_clock=False should drop the clock from the scroll: "
+        f"shown={shown.width}px, hidden={hidden.width}px"
+    )
+    print(f"PASS  show_clock=False drops the clock from the scroll "
+          f"({shown.width}px -> {hidden.width}px)")
+
     # A live game for the pinned team holds the left module while everything
     # else scrolls past it -- the point being that a game you care about
     # should not scroll away mid-at-bat.
@@ -1557,6 +1586,63 @@ def main():
     )
     print("PASS  a live game still wins the static panel outright over the "
           "clock/weather fallback")
+
+    # The scroll's own clock is redundant whenever the static panel is
+    # already showing the time (the clock/weather fallback, nothing live)
+    # -- it only earns its place once a live game has bumped the clock out
+    # of that slot. A second followed team with its own upcoming game keeps
+    # the scroll non-empty even once the panel absorbs the first team's
+    # live game entirely -- with only one followed team, that game would
+    # be pinned to the panel *and* excluded from the scroll, leaving
+    # nothing there to check _clock_box against at all.
+    sc_plugin = LocalScoreboardPlugin(
+        "local-scoreboard", {"teams": [
+            {"abbr": "NYY", "league": "mlb", "name": "Yankees"},
+            {"abbr": "NYM", "league": "mlb", "name": "Mets"},
+        ]},
+        FakeDisplay(192, 32), FakeCache(), None,
+    )
+    sc_plugin.games = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"},
+        {"abbr": "NYM", "league": "mlb", "name": "Mets"},
+    ])
+    sc_plugin.teams_panel_priority = ["NYY"]
+    sc_plugin.games._games = [{
+        "id": "scu1", "league": "mlb", "state": STATE_UPCOMING, "start": "",
+        "home": {"abbr": "NYY", "score": ""}, "away": {"abbr": "BOS", "score": ""},
+        "situation": {}, "leaders": [],
+    }, {
+        "id": "scu2", "league": "mlb", "state": STATE_UPCOMING, "start": "",
+        "home": {"abbr": "NYM", "score": ""}, "away": {"abbr": "ATL", "score": ""},
+        "situation": {}, "leaders": [],
+    }]
+    assert sc_plugin._display_strip(), "not-live strip failed to draw"
+    assert not sc_plugin.strip._clock_box, (
+        "the scroll should not carry its own clock while the static panel "
+        "is already showing the clock/weather fallback"
+    )
+
+    sc_plugin.games._games = [{
+        "id": "scl1", "league": "mlb", "state": STATE_LIVE, "start": "",
+        "home": {"abbr": "NYY", "score": "3"}, "away": {"abbr": "BOS", "score": "2"},
+        "situation": {"kind": "baseball", "balls": 1, "strikes": 1, "outs": 0},
+        "leaders": [],
+    }, {
+        "id": "scu2", "league": "mlb", "state": STATE_UPCOMING, "start": "",
+        "home": {"abbr": "NYM", "score": ""}, "away": {"abbr": "ATL", "score": ""},
+        "situation": {}, "leaders": [],
+    }]
+    sc_plugin.strip._last_build = 0.0
+    assert sc_plugin._display_strip(), "live strip failed to draw"
+    if sc_plugin._urgent_adopt:
+        assert sc_plugin.strip._wait_for_background_build()
+        assert sc_plugin._display_strip()
+    assert sc_plugin.strip._clock_box, (
+        "the scroll should carry its own clock once a live game has taken "
+        "over the static panel, since the clock is no longer shown there"
+    )
+    print("PASS  the scroll only carries its own clock while a live game "
+          "has taken over the static panel")
 
     # The refresh gate: check for a live game every idle_interval (a
     # minute by default), and once ANY followed team actually is live --
@@ -2560,17 +2646,20 @@ def main():
     # live game.
     forecast_weather = dict(moon_weather, hourly=[{"name": "8P", "temp": 77}],
                             daily=[{"name": "MON", "temp": 80}])
+    # 2pm, deliberately inside the hourly-forecast's own 6am-8pm daytime
+    # window (tested separately below) so this test is only about
+    # show_forecast, not confounded by that other cutoff.
     shown_img = Image.new("RGB", (250, 32), (0, 0, 0))
     shown_draw = _MoonID.Draw(shown_img)
     shown_w = rmoonw._draw_weather(
         shown_img, shown_draw, 2, forecast_weather, moon_font, moon_row_h,
-        _dt(2026, 8, 12), show_forecast=True)
+        _dt(2026, 8, 12, 14, 0), show_forecast=True)
 
     hidden_img = Image.new("RGB", (250, 32), (0, 0, 0))
     hidden_draw = _MoonID.Draw(hidden_img)
     hidden_w = rmoonw._draw_weather(
         hidden_img, hidden_draw, 2, forecast_weather, moon_font, moon_row_h,
-        _dt(2026, 8, 12), show_forecast=False)
+        _dt(2026, 8, 12, 14, 0), show_forecast=False)
     assert hidden_w < shown_w, (
         f"show_forecast=False should drop the forecast/moon columns: "
         f"shown={shown_w}px, hidden={hidden_w}px"
@@ -2587,6 +2676,61 @@ def main():
     print(f"PASS  show_forecast=False hides the moon phase and forecast "
           f"columns but keeps current conditions up ({shown_w}px -> "
           f"{hidden_w}px)")
+
+    # The hourly ("NEXT HOURS") column has its own separate 6am-8pm cutoff,
+    # unrelated to show_forecast -- an hour-by-hour forecast stops earning
+    # its place once it's mostly covering overnight. The 5-day forecast and
+    # moon phase are unaffected either way.
+    #
+    # Isolated as with-hourly-data minus without, at the *same* moment each
+    # time -- moon illumination is a continuous function of the exact
+    # datetime passed, not just the date, so comparing raw widths across
+    # different hours directly (as an earlier version of this test did)
+    # picked up moon-phase text width drift alongside the hourly column,
+    # and failed for the wrong reason. Holding `when` fixed within each
+    # comparison cancels the moon out, leaving only the hourly column's
+    # own contribution.
+    daily_only = dict(forecast_weather)
+    del daily_only["hourly"]
+
+    def _hourly_contribution(when):
+        with_hourly = rmoonw._draw_weather(
+            Image.new("RGB", (250, 32), (0, 0, 0)), _MoonID.Draw(
+                Image.new("RGB", (250, 32), (0, 0, 0))),
+            2, forecast_weather, moon_font, moon_row_h, when,
+            show_forecast=True)
+        without_hourly = rmoonw._draw_weather(
+            Image.new("RGB", (250, 32), (0, 0, 0)), _MoonID.Draw(
+                Image.new("RGB", (250, 32), (0, 0, 0))),
+            2, daily_only, moon_font, moon_row_h, when, show_forecast=True)
+        return with_hourly - without_hourly
+
+    day_delta = _hourly_contribution(_dt(2026, 8, 12, 14, 0))    # 2pm
+    night_delta = _hourly_contribution(_dt(2026, 8, 12, 21, 0))  # 9pm
+    early_delta = _hourly_contribution(_dt(2026, 8, 12, 5, 0))   # 5am
+    open_delta = _hourly_contribution(_dt(2026, 8, 12, 6, 0))    # 6am, shown
+    close_delta = _hourly_contribution(_dt(2026, 8, 12, 20, 0))  # 8pm, hidden
+
+    assert day_delta > 0, (
+        f"hourly forecast should contribute real width at 2pm: {day_delta}px"
+    )
+    assert night_delta == 0, (
+        f"hourly forecast should be hidden by 9pm: {night_delta}px"
+    )
+    assert early_delta == 0, (
+        f"hourly forecast should still be hidden at 5am, before the 6am "
+        f"cutoff: {early_delta}px"
+    )
+    assert open_delta == day_delta, (
+        f"6am itself should already show the hourly forecast: "
+        f"{open_delta}px vs daytime {day_delta}px"
+    )
+    assert close_delta == 0, (
+        f"8pm itself should already hide the hourly forecast: {close_delta}px"
+    )
+    print(f"PASS  hourly forecast column only shows 6am-8pm "
+          f"(contributes {day_delta}px by day, {night_delta}px overnight), "
+          f"5-day forecast and moon unaffected")
 
     # Countdown: pure date arithmetic, recurring every year. Must roll over
     # to next year once this year's date has passed, and must not crash on
@@ -3445,6 +3589,82 @@ def main():
     )
     print("PASS  an already-live game's own count/outs/batter changing "
           "adopts immediately too, not just a game starting or ending")
+
+    # The single most common live-game case: exactly one followed team,
+    # its only game the one now pinned to the static panel. _display_strip
+    # excludes a panel-pinned game from teams_and_games (showing it twice
+    # would waste the scroll), which also made it invisible to
+    # _live_signature -- a followed team's live game going from nothing
+    # live to live (or its score/count changing) never registered as a
+    # change at all in exactly this case, the one this plugin's whole
+    # static-panel feature exists for. The panel itself always redraws
+    # fresh every frame regardless, so this was never a stale-panel bug --
+    # but leaderboards/awards/countdowns hiding, and the clock joining the
+    # scroll, still silently waited for the next natural seam.
+    # A second followed team with its own game keeps teams_and_games
+    # non-empty once the panel absorbs the first team's only game entirely
+    # -- with a single followed team, that absorption empties the scroll
+    # outright and _display_strip bails out before ever reaching
+    # _live_signature, which would prove nothing about this fix either way.
+    panel_urgent = LocalScoreboardPlugin(
+        "local-scoreboard", {"teams": [
+            {"abbr": "NYY", "league": "mlb", "name": "Yankees"},
+            {"abbr": "NYM", "league": "mlb", "name": "Mets"},
+        ]},
+        FakeDisplay(192, 32), FakeCache(), None,
+    )
+    panel_urgent.games = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"},
+        {"abbr": "NYM", "league": "mlb", "name": "Mets"},
+    ])
+    panel_urgent.teams_panel_priority = ["NYY"]
+    panel_urgent._leaderboards = lambda: (
+        [("AL HR LEADERS", lb_rows, "HR")], [("AL MVP WATCH", lb_rows)])
+    panel_urgent.teams_leaderboards_on = True
+    panel_urgent.games._games = [{
+        "id": "pu1", "league": "mlb", "state": STATE_UPCOMING, "start": "",
+        "home": {"abbr": "NYY", "score": ""}, "away": {"abbr": "BOS", "score": ""},
+        "situation": {}, "leaders": [],
+    }, {
+        "id": "pu3", "league": "mlb", "state": STATE_UPCOMING, "start": "",
+        "home": {"abbr": "NYM", "score": ""}, "away": {"abbr": "ATL", "score": ""},
+        "situation": {}, "leaders": [],
+    }]
+    assert panel_urgent._display_strip(), "panel-urgent baseline strip failed to draw"
+    assert panel_urgent._urgent_adopt is False
+
+    panel_urgent.games._games = [{
+        "id": "pu2", "league": "mlb", "state": STATE_LIVE, "start": "",
+        "home": {"abbr": "NYY", "score": "1"}, "away": {"abbr": "BOS", "score": "0"},
+        "situation": {"kind": "baseball", "balls": 0, "strikes": 0, "outs": 0},
+        "leaders": [],
+    }, {
+        "id": "pu3", "league": "mlb", "state": STATE_UPCOMING, "start": "",
+        "home": {"abbr": "NYM", "score": ""}, "away": {"abbr": "ATL", "score": ""},
+        "situation": {}, "leaders": [],
+    }]
+    panel_urgent.strip._last_build = 0.0
+    assert panel_urgent._display_strip(), "panel-urgent trigger frame failed to draw"
+    live_signature_after = panel_urgent._last_live_signature
+    assert live_signature_after != ((), ()), (
+        "a followed team's live game becoming the panel-pinned game must "
+        "still register in the live-content fingerprint, even though it "
+        "is excluded from teams_and_games to avoid showing it twice"
+    )
+    # As in the tests above: usually still pending at this exact point,
+    # but on a strip this small the background build can occasionally
+    # finish and adopt within the same frame -- a faster result, not a
+    # failure. Only the eventual settled state matters here.
+    if panel_urgent._urgent_adopt:
+        assert panel_urgent.strip._wait_for_background_build()
+        assert panel_urgent._display_strip()
+    assert panel_urgent._urgent_adopt is False, (
+        "the out-of-turn adopt should have settled by now, one way or "
+        "the other"
+    )
+    print("PASS  a followed team's live game pinned to the static panel "
+          "still triggers the same out-of-turn adopt as any other live "
+          "game, not just ones that stay in the scroll")
 
     # ---- 6. Plugin lifecycle -------------------------------------------
     plugin_display = FakeDisplay(192, 32)

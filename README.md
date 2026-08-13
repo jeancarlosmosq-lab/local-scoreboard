@@ -36,7 +36,9 @@ A live game — any live game, not just a followed team's — hides the season l
 
 Weather's current conditions stay up regardless -- the same reasoning that leads the whole strip with weather in the first place, a warning is more urgent than a live score. The moon phase and hourly/5-day forecast columns follow the same hiding rule as leaderboards, but only if `weather.hide_forecast_when_live` is turned on; it defaults to off, so installs that don't set it keep the original always-shown behaviour.
 
-When nothing is live, the leftmost module shows this same clock-and-weather block on its own, pinned in place while the rest of the strip scrolls past — the same slot a live game takes over automatically the moment there is one.
+The hourly forecast has its own separate cutoff on top of that, always on: shown 6am-8pm, hidden overnight. An hour-by-hour forecast is for deciding what to do with the rest of today; by 8pm it's mostly covering hours you'll be asleep for, and the 5-day forecast (and moon phase) stay up the whole time regardless.
+
+When nothing is live, the leftmost module shows this same clock-and-weather block on its own, pinned in place while the rest of the strip scrolls past — the same slot a live game takes over automatically the moment there is one. The scroll carries its own copy of the clock only while that slot has been taken over by a live game -- otherwise the static panel is already showing the time, and a second copy scrolling past would just be the same clock twice.
 
 ## Continuous scrolling
 
@@ -120,4 +122,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.41.0
+0.42.0
