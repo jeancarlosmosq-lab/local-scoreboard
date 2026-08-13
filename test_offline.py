@@ -1429,6 +1429,121 @@ def main():
     print("PASS  ranks 1-3 render gold/silver/bronze, team abbreviations in "
           "their own team's colour")
 
+    # All 3 ranked rows must render specifically at real hardware's own
+    # row_h=8, not just whatever row_h this sandbox's fallback font
+    # happens to measure -- title-plus-3-rows silently dropped the 3rd
+    # row at exactly this row_h once, since the shared body font is sized
+    # to fill 4 rows across the *whole* panel height with nothing held
+    # back for the 1px margin every other segment reserves, and 4*8=32
+    # left no room for it. Confirmed against a real render on the Pi, not
+    # just this forced-row_h simulation.
+    import strip_renderer as _lb8mod
+    _lb8_orig_fit = _lb8mod.StripRenderer._fit_font
+
+    def _lb8_forced(self, draw, rows, avail, min_row_h=None):
+        f, _ = _lb8_orig_fit(self, draw, rows, avail)
+        return f, 8
+
+    _lb8mod.StripRenderer._fit_font = _lb8_forced
+    try:
+        rlb8 = StripRenderer(FakeDisplay(192, 32), {}, log)
+        lb8_calls = []
+        lb8_img = Image.new("RGB", (220, 32), (0, 0, 0))
+        from PIL import ImageDraw as _LB8ID
+        lb8_draw = _LB8ID.Draw(lb8_img)
+        lb8_real_text = lb8_draw.text
+
+        def _lb8_spy(xy, text, font=None, fill=None, **kw):
+            lb8_calls.append(text)
+            return lb8_real_text(xy, text, font=font, fill=fill, **kw)
+
+        lb8_draw.text = _lb8_spy
+        lb8_font, lb8_row_h = rlb8._fit_font(lb8_draw, 4, rlb8.height)
+        assert lb8_row_h == 8, f"test setup error: expected row_h=8, got {lb8_row_h}"
+        rlb8._draw_leaderboard(lb8_img, lb8_draw, 2, "HR LEADERS", medal_rows,
+                               lb8_font, lb8_row_h, "HR")
+    finally:
+        _lb8mod.StripRenderer._fit_font = _lb8_orig_fit
+    assert "1.A.JUDGE" in lb8_calls, f"rank 1 missing at row_h=8: {lb8_calls}"
+    assert "2.R.DEVERS" in lb8_calls, f"rank 2 missing at row_h=8: {lb8_calls}"
+    assert "3.V.GUERRERO" in lb8_calls, (
+        f"rank 3 was silently dropped at row_h=8, the real hardware row "
+        f"height, even though it draws fine at this sandbox's own "
+        f"natural row_h: {lb8_calls}"
+    )
+    print("PASS  all 3 ranked rows render at real hardware's row_h=8, not "
+          "just this sandbox's own natural row height")
+
+    # The football possession marker used to be a Unicode "●", which real
+    # BDF fonts can't encode at all -- UnicodeEncodeError on the Pi the
+    # moment a followed team's opponent had the ball. Fixed by switching to
+    # plain "*". Two separate draw sites had this bug (the scrolling strip's
+    # live detail, and the static panel's possession ticker); both need to
+    # actually draw "*" now, not just avoid crashing.
+    poss_img = Image.new("RGB", (220, 32), (0, 0, 0))
+    from PIL import ImageDraw as _PossID
+    poss_draw = _PossID.Draw(poss_img)
+    poss_real_text = poss_draw.text
+    poss_calls = []
+
+    def _poss_spy(xy, text, font=None, fill=None, **kw):
+        poss_calls.append(text)
+        return poss_real_text(xy, text, font=font, fill=fill, **kw)
+
+    poss_draw.text = _poss_spy
+    poss_renderer = StripRenderer(FakeDisplay(192, 32), {}, log)
+    poss_font, poss_row_h = poss_renderer._fit_font(poss_draw, 2, poss_renderer.height)
+    poss_game = {
+        "id": "p1", "league": "nfl", "state": STATE_LIVE, "start": "",
+        "away": {"abbr": "BUF", "score": "14"},
+        "home": {"abbr": "NYG", "score": "10"},
+        "situation": {"kind": "football", "down_distance": "2nd & 5",
+                     "yard_line": "NYG 30", "possession": "NYG",
+                     "red_zone": False},
+    }
+    poss_renderer._draw_live_detail(poss_img, poss_draw, 0, poss_game,
+                                    poss_font, poss_row_h)
+    assert any("*" in t for t in poss_calls), (
+        f"possession marker missing entirely from the strip's live detail: "
+        f"{poss_calls}"
+    )
+    assert not any("●" in t for t in poss_calls), (
+        f"raw Unicode possession marker reached draw.text, will crash on "
+        f"real BDF fonts: {poss_calls}"
+    )
+    print("PASS  strip live-detail draws the football possession marker as "
+          "ASCII \"*\", not the Unicode \"●\" that crashes real BDF fonts")
+
+    # Same check for the static panel's own possession ticker -- a separate
+    # code path (render_static_panel), separate draw call, same bug class.
+    import PIL.ImageDraw as _PanelIDMod
+    _panel_orig_text = _PanelIDMod.ImageDraw.text
+    panel_poss_calls = []
+
+    def _panel_poss_spy(self, xy, text, font=None, fill=None, **kw):
+        panel_poss_calls.append(text)
+        return _panel_orig_text(self, xy, text, font=font, fill=fill, **kw)
+
+    _PanelIDMod.ImageDraw.text = _panel_poss_spy
+    try:
+        poss_panel_renderer = StripRenderer(FakeDisplay(64, 32), {}, log,
+                                            logo_manager=logos)
+        poss_panel = poss_panel_renderer.render_static_panel(poss_game, "NYG", 64)
+    finally:
+        _PanelIDMod.ImageDraw.text = _panel_orig_text
+    assert poss_panel is not None
+    assert any(t.endswith("*") for t in panel_poss_calls), (
+        f"possession marker missing entirely from the static panel's "
+        f"ticker: {panel_poss_calls}"
+    )
+    assert not any("●" in t for t in panel_poss_calls), (
+        f"raw Unicode possession marker reached draw.text on the static "
+        f"panel, will crash on real BDF fonts: {panel_poss_calls}"
+    )
+    print("PASS  static panel draws the football possession marker as "
+          "ASCII \"*\" too, not the Unicode \"●\" that crashes real "
+          "BDF fonts")
+
     # AL and NL get their own mark instead of a text prefix; MLB (the merged
     # scope) keeps the text label since it has no mark of its own here.
     from awards_manager import AWARD_DEFINITIONS as _AD
@@ -2671,6 +2786,17 @@ def main():
         f"(header={header_w}px, column={single_col_w}px)"
     )
 
+    # This fixture is 4 real day/temp columns -- production never shows
+    # more than 4 (`daily[:4]`) -- against the same "4 DAY FORECAST"
+    # header used above. In the sandbox font these 4 columns are reliably
+    # wider than their own header, so the row should sit flush-left with
+    # no shift. On real BDF fonts that isn't guaranteed: confirmed on the
+    # Pi, "4 DAY FORECAST" (70px) actually measured *wider* than these 4
+    # columns combined (68px), flipping which side the code's own
+    # max(0, (header_w - total_w) // 2) formula shifts -- a 1-2px
+    # centering nudge either way is harmless on screen, so the assertion
+    # checks the row obeys that same formula (whichever side is wider),
+    # not a specific hardcoded outcome that only held for one font.
     wide_weather = {"now_temp": 78, "units": "F", "now_condition": "Clear",
                     "daily": [{"name": "MON", "temp": 80}, {"name": "TUE", "temp": 82},
                              {"name": "WED", "temp": 79}, {"name": "THU", "temp": 77}]}
@@ -2680,14 +2806,25 @@ def main():
         Image.new("RGB", (300, 32), (0, 0, 0)), _CenterID.Draw(
             Image.new("RGB", (300, 32), (0, 0, 0))),
         2, wide_weather, narrow_font, narrow_row_h)
-    assert col_calls[0] == row_start_calls[0], (
-        f"columns wider than the header should stay flush-left with it, "
-        f"not shift: column={col_calls[0]}, header={row_start_calls[0]}"
+    wide_total_w = sum(
+        orig_fcol(_CenterID.Draw(Image.new("RGB", (1, 1))), 0, entry,
+                 narrow_font, narrow_row_h, "F",
+                 content_top=narrow_row_h + 1, measure_only=True)
+        for entry in wide_weather["daily"]
+    )
+    expected_wide_shift = max(0, (header_w - wide_total_w) // 2)
+    actual_wide_shift = col_calls[0] - row_start_calls[0]
+    assert abs(actual_wide_shift - expected_wide_shift) <= 1, (
+        f"forecast row's own centering formula not honoured: got shift "
+        f"{actual_wide_shift}px, expected ~{expected_wide_shift}px "
+        f"(header={header_w}px, columns={wide_total_w}px)"
     )
     print(f"PASS  forecast columns centre under a wider header "
           f"({single_col_w}px column under a {header_w}px header, shifted "
-          f"{expected_shift}px) and stay flush-left when they're the "
-          f"wider side")
+          f"{expected_shift}px), and obey the same centering formula "
+          f"({wide_total_w}px columns under a {header_w}px header, "
+          f"shifted {actual_wide_shift}px) whichever side ends up wider "
+          f"on the font actually loaded")
 
     # _draw_forecast_row must return a width to add to x, the same
     # convention every other segment on the strip returns -- not the

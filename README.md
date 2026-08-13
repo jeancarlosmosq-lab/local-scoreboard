@@ -4,13 +4,13 @@ One board for the teams you follow, across MLB, NBA, NFL and La Liga: live score
 
 Every one of those is configuration, not code: your teams, your city's weather coordinates, your own dates to count down to. The default example roster is Yankees, Mets, Nets, Giants and Knicks with Bayonne, NJ weather, but none of that is required — point it at your own teams and your own city and it runs exactly the same way.
 
-## One board, one scroll
+## One Board, One Scroll
 
 Scores, performances, season leaderboards, weather and countdowns all live on the same strip. That was the reason to merge scores and stats into one plugin in the first place: with two plugins the display hands between them, so a leaderboard and a score can never be part of one continuous scroll.
 
 This replaces both `baseball-scoreboard` and `baseball-stats` — disable them once this is running, or the same information appears twice in a rotation.
 
-## The team strip
+## The Team Strip
 
 The default layout. Every team lives on **one continuous strip** that scrolls past the panel and wraps, so the board never stops or blanks between teams.
 
@@ -28,7 +28,7 @@ Games elsewhere in the league that aren't a followed team's own are interleaved 
 
 Status is colour-coded — green in progress, amber upcoming, grey final, orange for a rivalry game — and on a finished game the losing side dims, so the result reads without comparing two numbers.
 
-## Weather, moon phase and countdowns
+## Weather, Moon Phase And Countdowns
 
 Ahead of the teams: current conditions and an hourly and 4-day forecast from the US National Weather Service (free, keyless), a clock, the moon's current phase, and days-until for any personal dates you configure — a birthday, a holiday, first day of school. Each countdown gets an icon guessed from its own name (a cake for a birthday, a tree for Christmas, a pencil for school, a star otherwise), and reads "TODAY!" on the day itself.
 
@@ -44,13 +44,13 @@ Current conditions (the icon and plain temperature) hide from the scroll wheneve
 
 When nothing is live, the leftmost module shows this same clock-and-weather block on its own, pinned in place while the rest of the strip scrolls past — the same slot a live game takes over automatically the moment there is one. The scroll carries its own copy of the clock only while that slot has been taken over by a live game -- otherwise the static panel is already showing the time, and a second copy scrolling past would just be the same clock twice.
 
-## Continuous scrolling
+## Continuous Scrolling
 
 The strip scrolls without stopping and wraps at its end, at the framework's own high-FPS loop so the motion stays smooth. Rebuilding the strip -- tens of milliseconds, more on a Pi -- runs on a background thread rather than blocking a frame, and a rebuilt strip waits for the scroll's seam before swapping in, so an update is only ever adopted while it is off-screen — replacing the image mid-pass would shift every segment after the changed one sideways.
 
 Teams playing now lead the strip. A live score is the one thing here that will not keep, and leaving it in configured order meant waiting most of a pass to reach it.
 
-## Live game detail
+## Live Game Detail
 
 Each sport draws what a fan of that sport actually watches for:
 
@@ -65,7 +65,7 @@ Basketball and soccer get no segment of their own because nothing beyond the clo
 
 A followed team's own live game can also pin to the leftmost module, held in place while everything else scrolls past — so a game you actually care about is never scrolled away mid-at-bat.
 
-## Display modes
+## Display Modes
 
 `local_scoreboard` in the strip layout — the other three (`local_live`, `local_recent`, `local_upcoming`) are declared so the layout can be switched without reinstalling, but they decline while the strip is active, so the board takes one rotation slot rather than four. Setting **Layout** to `cards` gives the earlier one-game-at-a-time behaviour instead.
 
@@ -91,7 +91,7 @@ Weather takes a place name, latitude and longitude, and units (`F` or `C`) — p
 
 Other settings worth knowing: **Seconds Per Game** (12), **Max Seconds Per Visit** (60, after which the plugin hands the panel back and resumes at the next game on its following turn), **Upcoming Games To Show** (5), **Scroll Speed** (pixels/second), and toggles for logos, leaderboards, other-live games, weather, countdowns and the notable-player line.
 
-## Panel sizes
+## Panel Sizes
 
 Layout is derived from the panel, not hardcoded. Tested at 192×32, 128×32, 64×32 and 128×64. On a narrow panel the notable-player line and team records are dropped, since neither can say anything useful in that width.
 
@@ -116,7 +116,7 @@ python3 ~/install_local_scoreboard.py
 
 Safe to run more than once, and migrates an existing install from the plugin's old id (`nyc-teams`) automatically, carrying every setting over.
 
-## Known limitations
+## Known Limitations
 
 - **Team abbreviations are ESPN's.** Common variants are aliased, but an abbreviation outside that table and outside ESPN's own spelling silently yields an empty board. If a team never appears, that's the first thing to check.
 - **Notable players depend on ESPN publishing leaders** for that game. Some games have none, particularly early in progress. `diagnose_leaders.py` reports what ESPN is actually returning per game, which separates a data gap from a rendering fault.
@@ -126,4 +126,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.49.0
+0.50.0

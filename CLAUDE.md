@@ -1,9 +1,9 @@
-# CLAUDE.md — local-scoreboard LEDMatrix plugin
+# CLAUDE.md — local-scoreboard LEDMatrix Plugin
 
 Context for continuing this project in Claude Code. Read this before making
 changes — several of these were expensive to learn once already.
 
-## What this is
+## What This Is
 
 A LEDMatrix plugin (id `local-scoreboard`, class `LocalScoreboardPlugin`,
 previously shipped privately as `nyc-teams`/`NYCTeamsPlugin` before a public
@@ -23,7 +23,7 @@ nothing is.
 Current version: see `manifest.json`. Bump it and add a changelog entry on
 every change — this has been the working discipline throughout.
 
-## The most important thing: sandbox fonts ≠ real fonts
+## The Most Important Thing: Sandbox Fonts ≠ Real Fonts
 
 This is the single most consequential lesson from building this. Testing in
 a sandbox without real BDF font files uses PIL's `ImageFont.load_default()`
@@ -47,7 +47,7 @@ If you don't have Pi access in this session, say so explicitly rather than
 asserting a layout fix works. A sandbox-only render is not sufficient
 evidence for anything involving font metrics.
 
-## The second most important thing: manifest `update_interval` gates everything
+## The Second Most Important Thing: Manifest `update_interval` Gates Everything
 
 LEDMatrix's own scheduler decides how often to even call this plugin's
 `update()` — see `plugin_manager.py`'s `_get_plugin_update_interval()` on the
@@ -78,7 +78,7 @@ plugin's own refresh logic is at fault; the plugin's own gates can be
 completely correct while a framework-level scheduling default overrides them
 invisibly.
 
-## The third most important thing: composing a rebuilt strip runs in its own process
+## The Third Most Important Thing: Composing A Rebuilt Strip Runs In Its Own Process
 
 `strip_renderer.py`'s background rebuild (`_dispatch_background_build`)
 originally ran on a background *thread*. That was never actually free: a
@@ -141,7 +141,7 @@ a real OS process per test instance would make the suite far slower for
 no benefit (nothing there is racing real matrix output for CPU). Only
 `manager.py`'s actual on-device instance opts in.
 
-## Text positioning: always use `_text_top` / `_text_bottom` / `_vblock_start`
+## Text Positioning: Always Use `_text_top` / `_text_bottom` / `_vblock_start`
 
 Never call `draw.text((x, N), ...)` with a bare row number. This font
 family's leading means a glyph drawn "at row 1" doesn't put ink at row 1.
@@ -164,7 +164,7 @@ the **first** font in `FONT_LADDER` preference order that fits — it is NOT
 "biggest that fits," and using it where you want "as big as possible" is a
 bug (this shipped once already, for the clock).
 
-## Testing discipline
+## Testing Discipline
 
 `test_offline.py` is the whole safety net — no LED panel or network needed.
 Run it after every change:
@@ -190,6 +190,37 @@ Patterns established and expected to continue:
   accidentally gutted twice by a `.replace()` matching a wider span than
   intended. Always verify occurrence count is exactly 1 before replacing,
   and check line count / `grep -c "^    def "` before and after.
+- **Clear `__pycache__` on the Pi before trusting a Pi-side test run.**
+  `rsync` deploys never delete stale `.pyc` files (nothing excludes or
+  cleans `__pycache__` on the receiving end), and Python will silently
+  reuse a cached bytecode file instead of recompiling from the newly
+  deployed source if the cache looks current to it. This produced one
+  confirmed false positive: a `_draw_leaderboard` centering test came
+  back PASS against a Pi run, which turned out to be stale bytecode from
+  an earlier, already-superseded iteration of the fix, not the actual
+  deployed source — rerunning after `find . -name __pycache__ -exec rm
+  -rf {} +` reproduced the real, still-broken result immediately and
+  deterministically. Treat a Pi-side PASS as suspect, not just an
+  on-device sandbox render, whenever the source file it exercises
+  changed since the last time that Pi's `__pycache__` was touched.
+- **A `textbbox()`-based ink-height estimate is still just an estimate,
+  not what actually gets lit.** `_draw_leaderboard`'s vertical centring
+  first tried `row_h` for every row, then `row_h` for inner rows plus a
+  sample glyph's own `textbbox` height for just the last row (to drop
+  the trailing leading line-following rows don't need) -- both were
+  provably wrong on the Pi, off by a real, visible pixel in the second
+  case, because `textbbox` reports a string's *declared* bounding box,
+  and the actual glyphs a leaderboard draws (digits, periods, no
+  descenders) don't always light every row that box implies. The fix
+  that finally held: render the block once onto a scratch canvas,
+  measure the real min/max **lit pixels**, and only then compute the
+  vertical offset needed to centre that measured extent -- no font
+  metric involved at all, just what the font actually put on screen.
+  Slower (one extra render per leaderboard segment) but exact regardless
+  of which BDF file loads. The general lesson: for anything pixel-exact,
+  prefer rendering and measuring over any font-metric formula, however
+  many times the formula has already been refined -- this one needed
+  three attempts before an approach stopped being wrong in some new way.
 
 ## Deployment
 
@@ -221,7 +252,7 @@ Confirm the restart worked:
 journalctl -u ledmatrix --since "1 minute ago" --no-pager
 ```
 
-## Known open items
+## Known Open Items
 
 - No confirmed structured source for individual MLB award odds exists
   (`diagnose_award_odds.py` established this — ESPN's futures endpoint only
@@ -238,18 +269,27 @@ journalctl -u ledmatrix --since "1 minute ago" --no-pager
   (`_draw_countdown_icon` in `strip_renderer.py`) — a birthday/Christmas/
   school get a specific icon, anything else falls back to a plain star,
   since there is no fixed category list for free-text event names.
-- **`_draw_leaderboard` silently drops the 3rd ranked row on real
-  hardware.** Found running `test_offline.py` on the Pi directly for the
-  first time this session (it had only ever been run in the sandbox
-  before) — another instance of the sandbox-fonts-≠-real-fonts gap.
-  `max_rows = (self.height - self.MARGIN * 2) // use_row_h - 1` uses the
-  shared body font's row_h, which is sized to fit 4 rows across the
-  *whole* panel height (`self.height`, unmargined) — on real hardware
-  that's row_h=8, so 4 rows is exactly 32px with zero room for the 1px
-  top/bottom margin every other segment reserves, and the row-count cap
-  correctly (by its own arithmetic) backs off to 2 ranked rows instead of
-  3 rather than clip. Not touched this session — found while verifying
-  an unrelated fix, and fixing it properly means reconsidering the
-  shared font's own sizing (`self._fit_font(draw, 4, self.height)`),
-  which every other segment on the strip also uses, not just a
-  leaderboard-local change.
+
+## Real BDF Fonts Can't Encode Arbitrary Unicode
+
+A second, distinct flavor of the sandbox-fonts-≠-real-fonts gap: it's not
+just metrics (leading, row height) that differ, real BDF fonts also have a
+much narrower character set than whatever font the sandbox falls back to.
+A football possession marker drawn with the Unicode "●" (U+25CF) rendered
+fine in every sandbox check and crashed on the Pi with
+`UnicodeEncodeError: 'latin-1' codec can't encode character '●'` —
+only surfaced by running `test_offline.py` on the Pi directly, not by
+anything in the local suite. `_safe()` (NFKD-normalize + ASCII-encode,
+ignoring what doesn't fit) exists for exactly this, but it fails silently
+in two different ways depending on how it's used: skip it entirely and an
+unencodable character crashes the render; call it but then measure width
+with the original unsanitized string and the crash just moves to the
+measurement call instead of the draw call. Both happened here — draw was
+correctly wrapped in `_safe()`, but the width `_measure()` call right
+after it used the raw string. The actual fix was to stop feeding a
+Unicode symbol through `_safe()` at all and draw plain ASCII ("*" instead
+of "●") — sanitizing a symbol that can't survive ASCII conversion just
+means it silently vanishes from the display, not that it renders
+correctly by another means. Same lesson as the font-metrics gap: a
+sandbox-only render is not sufficient evidence for anything involving the
+real BDF fonts, character set included, not just row height.

@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.49.0",
+  "version": "0.50.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.50.0",
+      "released": "2026-08-13",
+      "notes": "Two real-hardware-only bugs, both found by running test_offline.py on the Pi directly for the first time (previously only targeted diagnostic scripts had been run there): the leaderboard was silently dropping its 3rd ranked row on real BDF fonts, and a live football game would crash the panel outright. The leaderboard drop: row_h=8 on real hardware (vs this sandbox's own ~7) meant 4 rows exactly filled the panel height with no room left for the shared 1px top/bottom margin, so the row-count cap backed off to 2 ranked rows instead of 3. Two font-metric-formula fixes were tried and both were provably wrong by a real pixel on the Pi -- textbbox() reports a string's declared bounding box, and the specific glyphs a leaderboard actually draws don't always light every row that box implies. The fix that held: render the block once onto a scratch canvas, measure the real lit pixels, and centre against that measured extent instead of any formula. The football crash: the possession marker was drawn as the Unicode circle '●', which real BDF fonts can't encode at all -- UnicodeEncodeError the moment a followed team's opponent had the ball, on both the scrolling strip's own live-game segment and the static panel's possession ticker. Fixed by drawing a plain ASCII '*' instead of relying on silent Unicode-stripping, which would have stopped the crash but also silently removed the marker with nothing left indicating who has the ball."
+    },
     {
       "version": "0.49.0",
       "released": "2026-08-13",

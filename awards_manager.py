@@ -74,7 +74,7 @@ AWARD_DEFINITIONS = {
     # before merging -- otherwise whichever group happened to have more
     # categories would dominate purely on point volume.
     "roy": {
-        "label": "ROOKIE OF YR",
+        "label": "ROY",
         "group": "hitting",
         "groups": ["hitting", "pitching"],
         "pool": "rookie",

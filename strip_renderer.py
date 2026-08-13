@@ -755,11 +755,20 @@ class StripRenderer:
             possession = situation.get("possession") or ""
             if possession:
                 # A ball marker beside the team with possession is the
-                # quickest read on a football board.
-                draw.text((x, top), self._safe(f"{possession} \u25cf"), font=font,
+                # quickest read on a football board. Plain "*", not the
+                # Unicode "\u25cf" circle this drew before -- real BDF
+                # fonts can't encode that at all (confirmed on the Pi:
+                # UnicodeEncodeError, a live-game crash the moment a
+                # followed team's opponent had the ball), and _safe()
+                # stripping it silently would have fixed the crash but
+                # also silently dropped the marker itself, with nothing
+                # left indicating who has the ball. "*" survives _safe()
+                # (it's already ASCII) and still reads as a marker.
+                possession_text = self._safe(f"{possession} *")
+                draw.text((x, top), possession_text, font=font,
                           fill=self.LIVE if not situation.get("red_zone")
                           else (255, 80, 60))
-                x += self._measure(draw, f"{possession} \u25cf", font)[0] + 5
+                x += self._measure(draw, possession_text, font)[0] + 5
             if down:
                 draw.text((x, top), self._safe(down), font=font, fill=self.LABEL)
                 x += self._measure(draw, down, font)[0] + 4
@@ -969,25 +978,7 @@ class StripRenderer:
             x += logo.width + 5
 
         visible = rows[:3]
-
-        # The standard body font, not a smaller candidate from the ladder --
-        # that smaller font's own letterforms read badly at this size
-        # (confirmed against real hardware), the same reason a live game's
-        # status label and "FINAL" no longer reach for it either. The shared
-        # body font is sized to fill 4 rows across the *whole* panel height,
-        # with nothing held back for the 1px top/bottom margin every other
-        # segment respects, so a title-plus-3-rows block -- the only thing
-        # on the strip that actually asks for the full 4 rows -- overflows
-        # the margined content area by one row's worth of pixels. Capping
-        # the row count before centring means what centres is what actually
-        # draws, rather than centring for 3 rows and then silently clipping
-        # the last one below -- a shorter, two-row board with the correct
-        # font over a three-row one with a font whose letters do not read.
         use_font, use_row_h = font, row_h
-        max_rows = max(0, (self.height - self.MARGIN * 2) // use_row_h - 1)
-        visible = visible[:min(3, max_rows)]
-        if not visible:
-            return 0
 
         # Measure first: the value column is as wide as its widest entry, and
         # the name column takes what is left of the segment.
@@ -1021,34 +1012,82 @@ class StripRenderer:
             name_w + gap + value_w,
         )
 
-        # Title plus up to three ranked rows, genuinely centred rather than
-        # top-anchored -- a shorter board (fewer than three rows returned)
-        # would otherwise dump all its slack below the last row instead of
-        # splitting it evenly around the block.
-        start_row = self._vblock_start(use_row_h, 1 + len(visible))
-        title_y = self._text_top(draw, use_font, start_row)
-        draw.text((x, title_y), self._safe(title), font=use_font, fill=self.UPCOMING)
-        if value_header:
-            hw = self._measure(draw, value_header, use_font)[0]
-            draw.text((x + block - hw, title_y), self._safe(value_header),
-                      font=use_font, fill=self.DIM)
+        def _paint(target_draw, start_row, visible_rows, x_offset):
+            title_y = self._text_top(target_draw, use_font, start_row)
+            target_draw.text((x_offset, title_y), self._safe(title),
+                             font=use_font, fill=self.UPCOMING)
+            if value_header:
+                hw = self._measure(target_draw, value_header, use_font)[0]
+                target_draw.text((x_offset + block - hw, title_y),
+                                 self._safe(value_header), font=use_font,
+                                 fill=self.DIM)
+            for i, row in enumerate(visible_rows):
+                rank_name, team = labels[i]
+                y = self._text_top(target_draw, use_font,
+                                   start_row + use_row_h * (i + 1))
+                rank_num = row.get("rank", i + 1)
+                medal = (self.MEDALS[rank_num - 1] if rank_num in (1, 2, 3)
+                         else self.LABEL)
+                target_draw.text((x_offset, y), rank_name, font=use_font,
+                                 fill=medal)
+                if team:
+                    cursor = x_offset + self._measure(
+                        target_draw, rank_name + " ", use_font)[0]
+                    team_color = self.TEAM_COLORS.get(team.upper(), self.LABEL)
+                    target_draw.text((cursor, y), team, font=use_font,
+                                     fill=team_color)
+                value = self._safe(row.get("value", ""))
+                if value:
+                    vw = self._measure(target_draw, value, use_font)[0]
+                    target_draw.text((x_offset + block - vw, y), value,
+                                     font=use_font, fill=self.VALUE)
 
-        for i, (row, (rank_name, team)) in enumerate(zip(visible, labels)):
-            y = start_row + use_row_h * (i + 1)
-            y = self._text_top(draw, use_font, y)
-            if y + use_row_h > self.height:
-                break
-            rank_num = row.get("rank", i + 1)
-            medal = self.MEDALS[rank_num - 1] if rank_num in (1, 2, 3) else self.LABEL
-            draw.text((x, y), rank_name, font=use_font, fill=medal)
-            if team:
-                cursor = x + self._measure(draw, rank_name + " ", use_font)[0]
-                team_color = self.TEAM_COLORS.get(team.upper(), self.LABEL)
-                draw.text((cursor, y), team, font=use_font, fill=team_color)
-            value = self._safe(row.get("value", ""))
-            if value:
-                vw = self._measure(draw, value, use_font)[0]
-                draw.text((x + block - vw, y), value, font=use_font, fill=self.VALUE)
+        # Where this block actually lands vertically is decided by
+        # rendering it once onto a scratch canvas and measuring the real
+        # lit pixels, not a font-metric formula. A textbbox-based
+        # estimate was tried first (row_h per row, a sample glyph's own
+        # ink height for just the last row so its trailing leading isn't
+        # counted) and was closer, but still off by a real pixel on the
+        # Pi: textbbox reports a string's declared bounding box, and the
+        # specific glyphs a leaderboard actually draws (digits, periods,
+        # no descenders) don't always light every row that box implies.
+        # Rendering for real and measuring what actually lit removes the
+        # guesswork entirely, the same principle this file already
+        # applies to crest margins.
+        margined_available = self.height - self.MARGIN * 2
+        scratch_h = self.height + use_row_h * 4
+
+        def _measure_block(n_rows):
+            trial = Image.new("RGB", (max(block, 1), scratch_h), (0, 0, 0))
+            tdraw = ImageDraw.Draw(trial)
+            _paint(tdraw, 0, visible[:n_rows], 0)
+            px = trial.load()
+            lit = [yy for yy in range(scratch_h)
+                  for xx in range(trial.width) if px[xx, yy] != (0, 0, 0)]
+            return (min(lit), max(lit)) if lit else (0, -1)
+
+        n_rows = len(visible)
+        ink_top, ink_bottom = _measure_block(n_rows)
+        content_h = ink_bottom - ink_top + 1
+        while content_h > self.height and n_rows > 0:
+            n_rows -= 1
+            if n_rows == 0:
+                return 0
+            ink_top, ink_bottom = _measure_block(n_rows)
+            content_h = ink_bottom - ink_top + 1
+        visible = visible[:n_rows]
+
+        # Title plus up to three ranked rows, genuinely centred rather
+        # than top-anchored -- a shorter board (fewer than three rows
+        # returned) would otherwise dump all its slack below the last
+        # row instead of splitting it evenly around the block.
+        if content_h <= margined_available:
+            target_top = self.MARGIN + (margined_available - content_h) // 2
+        else:
+            target_top = (self.height - content_h) // 2
+        start_row = target_top - ink_top
+
+        _paint(draw, start_row, visible, x)
 
         return (x + block + 6) - start
 
@@ -2399,8 +2438,15 @@ class StripRenderer:
                 label = self._safe(side.get("abbr", ""))
                 if kind == "football" and situation.get("possession") and \
                         situation["possession"].upper() == label.upper():
-                    # A ticker marks possession beside the team that has it.
-                    label = f"{label}\u25cf"
+                    # A ticker marks possession beside the team that has
+                    # it. Plain "*", not the Unicode "\u25cf" this drew
+                    # before -- real BDF fonts can't encode that at all
+                    # (confirmed on the Pi: crashed both the draw and the
+                    # width measurement below with UnicodeEncodeError),
+                    # and just _safe()-stripping it would have silently
+                    # dropped the marker with nothing left indicating
+                    # possession.
+                    label = f"{label}*"
                 draw.text((x, row_y(index + 1)), label, font=font,
                           fill=self.LABEL)
                 content_end_x = max(
