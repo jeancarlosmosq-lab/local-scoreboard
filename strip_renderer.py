@@ -1411,7 +1411,10 @@ class StripRenderer:
             column += self._draw_forecast_column(
                 draw, column, entry, font, row_h, unit,
                 content_top=content_top)
-        return max(x + header_w, column) + 4
+        # A width to add to x, not the absolute end position -- the caller
+        # does x += self._draw_forecast_row(...), the same convention
+        # every other segment on the strip returns.
+        return max(header_w, column - x) + 4
 
     def _truncate(self, draw, text: str, font, max_width: int) -> str:
         """Longest prefix that fits, so a condition never runs into the next

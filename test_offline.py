@@ -2593,6 +2593,42 @@ def main():
           f"{expected_shift}px) and stay flush-left when they're the "
           f"wider side")
 
+    # _draw_forecast_row must return a width to add to x, the same
+    # convention every other segment on the strip returns -- not the
+    # absolute end position. Shipped broken once already: returning the
+    # absolute position made the delta grow with wherever x already was,
+    # inflating the whole weather segment's width by roughly double
+    # whatever x was at the call site and leaving a large blank gap
+    # before the next segment. Caught by calling it directly at two
+    # different starting x values and checking the returned width is
+    # identical either way -- a width genuinely independent of position,
+    # which an absolute-position bug could not produce.
+    row_probe = _CenterID.Draw(Image.new("RGB", (1, 1)))
+    row_font, row_row_h = rcenter._fit_font(row_probe, 4, rcenter.height)
+    row_entries = [{"name": "MON", "temp": 80}, {"name": "TUE", "temp": 82}]
+    width_at_2 = rcenter._draw_forecast_row(
+        Image.new("RGB", (300, 32), (0, 0, 0)),
+        _CenterID.Draw(Image.new("RGB", (300, 32), (0, 0, 0))),
+        2, row_entries, "4 DAY FORECAST", row_font, row_row_h, "F",
+        content_top=row_row_h + 1)
+    width_at_100 = rcenter._draw_forecast_row(
+        Image.new("RGB", (300, 32), (0, 0, 0)),
+        _CenterID.Draw(Image.new("RGB", (300, 32), (0, 0, 0))),
+        100, row_entries, "4 DAY FORECAST", row_font, row_row_h, "F",
+        content_top=row_row_h + 1)
+    assert width_at_2 == width_at_100, (
+        f"_draw_forecast_row's return value must not depend on the "
+        f"starting x -- got {width_at_2}px at x=2 and {width_at_100}px "
+        f"at x=100, which means it's returning an absolute position "
+        f"instead of a width"
+    )
+    assert width_at_2 < 100, (
+        f"a two-column forecast row under 'NEXT HOURS'-sized content "
+        f"should not measure anywhere near 100px wide: {width_at_2}px"
+    )
+    print(f"PASS  _draw_forecast_row returns a width independent of its "
+          f"starting x ({width_at_2}px at both x=2 and x=100)")
+
     # "NEXT HOURS"/"4 DAY FORECAST" used to sit at the same top margin the
     # column's own day/hour label independently anchored to, using a
     # different (larger) font -- header and content competing for the same
