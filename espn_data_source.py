@@ -30,6 +30,14 @@ LEAGUES = {
     "mlb": ("baseball", "mlb"),
     "nba": ("basketball", "nba"),
     "nfl": ("football", "nfl"),
+    # Spain's top flight only, not every competition a club plays --
+    # ESPN's soccer endpoints are organised one competition at a time
+    # (league, cup, continental) rather than one feed per club the way
+    # the other three sports are, and this plugin's team model already
+    # assumes one league per followed team. A club that also plays a cup
+    # or Champions League needs a second team entry against that
+    # competition's own league key once one is added here.
+    "laliga": ("soccer", "esp.1"),
 }
 
 # The default roster of teams. rivals is deliberately the well-known

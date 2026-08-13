@@ -286,9 +286,11 @@
             "enum": [
               "mlb",
               "nba",
-              "nfl"
+              "nfl",
+              "laliga"
             ],
-            "title": "League"
+            "title": "League",
+            "description": "laliga is Spain's top flight only, not every competition a club plays -- ESPN organises soccer one competition at a time rather than one feed per club."
           },
           "name": {
             "type": "string",

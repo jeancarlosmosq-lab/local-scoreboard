@@ -1,6 +1,6 @@
 # Local Scoreboard
 
-One board for the teams you follow, across MLB, NBA and NFL: live scores, final results, upcoming games, team logos, and the notable performer from each game — plus local weather, a clock, moon phase and your own personal countdowns, all on the same continuous scroll.
+One board for the teams you follow, across MLB, NBA, NFL and La Liga: live scores, final results, upcoming games, team logos, and the notable performer from each game — plus local weather, a clock, moon phase and your own personal countdowns, all on the same continuous scroll.
 
 Every one of those is configuration, not code: your teams, your city's weather coordinates, your own dates to count down to. The default example roster is Yankees, Mets, Nets, Giants and Knicks with Bayonne, NJ weather, but none of that is required — point it at your own teams and your own city and it runs exactly the same way.
 
@@ -53,8 +53,9 @@ Each sport draws what a fan of that sport actually watches for:
 | Baseball | Diamond with the runners on, the count, the outs |
 | Football | Possession, down and distance, field position |
 | Basketball | Period and clock |
+| Soccer | Match clock only |
 
-Basketball gets no segment of its own because nothing beyond the clock changes fast enough to earn the space — the status line already carries it.
+Basketball and soccer get no segment of their own because nothing beyond the clock changes fast enough to earn the space — the status line already carries it.
 
 A followed team's own live game can also pin to the leftmost module, held in place while everything else scrolls past — so a game you actually care about is never scrolled away mid-at-bat.
 
@@ -72,9 +73,11 @@ The same ESPN endpoint shape serves baseball, basketball and football, which is 
 
 Refresh cadence follows the games: **~5 seconds** while any followed team is playing (or about to start), **~60 seconds** otherwise (both configurable). A final from last night doesn't change; a game in progress changes every pitch or possession. Finals have their notable players fetched once and remembered, since a completed box score is settled. Win/loss streaks come from ESPN's own league standings, refreshed on a much slower half-hour cadence.
 
+That 5-second data refresh reaches the panel just as fast: a live game's own score, count or batter changing is adopted onto the strip immediately rather than waiting for the current scroll pass to finish, the same as a game starting or ending already did -- on a long strip a full pass can take minutes, which is far too slow for an at-bat.
+
 ## Configuration
 
-Teams are `{abbr, league, name, rivals}` entries; leagues are `mlb`, `nba`, `nfl`. `rivals` is a list of opponent abbreviations that flag a game as a rivalry on the strip.
+Teams are `{abbr, league, name, rivals}` entries; leagues are `mlb`, `nba`, `nfl`, `laliga`. `rivals` is a list of opponent abbreviations that flag a game as a rivalry on the strip. `laliga` is Spain's top flight only, not every competition a club plays -- ESPN organises soccer one competition at a time rather than one feed per club, and a club that also plays a cup or continental competition would need a second team entry once that competition's own league key is added.
 
 Common alternate spellings are matched automatically — `NYK` and `NY` both find the Knicks, `AZ` and `ARI` both find the Diamondbacks. This matters because a wrong abbreviation is silent: it yields an empty board, which looks exactly like the team not playing.
 
@@ -111,9 +114,10 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 - **Team abbreviations are ESPN's.** Common variants are aliased, but an abbreviation outside that table and outside ESPN's own spelling silently yields an empty board. If a team never appears, that's the first thing to check.
 - **Notable players depend on ESPN publishing leaders** for that game. Some games have none, particularly early in progress. `diagnose_leaders.py` reports what ESPN is actually returning per game, which separates a data gap from a rendering fault.
-- **Three leagues only.** NHL and college would each need their abbreviations and a sport path, which is a small addition.
+- **Four leagues.** NHL and college would each need their abbreviations and a sport path, which is a small addition. Soccer support (`laliga`) is one league only -- other competitions and leagues follow the same pattern once needed.
+- **No notable-performer line for soccer.** ESPN carries baseball/basketball/football leaders on the scoreboard competition itself; soccer instead carries a play-by-play (goals, cards) under a different field this plugin doesn't read yet, so a soccer game's standout is always blank rather than sometimes blank like the other three leagues.
 - **Season leaderboards and award watch lists are MLB-only** today.
 
 ## Version
 
-0.39.0
+0.40.0

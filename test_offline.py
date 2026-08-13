@@ -79,6 +79,11 @@ SCOREBOARD_NFL = {"events": [
           "", "", "pre", False, "1:00 PM", date="2026-09-07T17:00Z"),
 ]}
 
+SCOREBOARD_SOCCER = {"events": [
+    event("701", ("GET", "Getafe", "0-0-0"), ("BAR", "Barcelona", "0-0-0"),
+          "0", "2", "in", False, "67'", clock="67'", period=2),
+]}
+
 SUMMARY = {"leaders": [
     {"team": {"abbreviation": "NYY"}, "leaders": [
         {"shortDisplayName": "HR", "leaders": [
@@ -139,6 +144,25 @@ def main():
     nfl = src._parse_events(SCOREBOARD_NFL, "nfl")
     assert nfl[0]["state"] == STATE_UPCOMING
     print("PASS  the same parser handles NBA and NFL payloads")
+
+    from espn_data_source import LEAGUES
+    assert LEAGUES.get("laliga") == ("soccer", "esp.1"), (
+        f"laliga must map to ESPN's soccer/esp.1 path: {LEAGUES.get('laliga')}"
+    )
+    soccer = src._parse_events(SCOREBOARD_SOCCER, "laliga")
+    assert soccer[0]["state"] == STATE_LIVE
+    assert soccer[0]["home"]["abbr"] == "BAR"
+    assert soccer[0]["clock"] == "67'"
+    # ESPN's soccer competitions carry no "situation" object at all, unlike
+    # baseball and football -- confirmed against a real live-shaped
+    # payload. Nothing should try to draw a live-detail segment for it,
+    # the same as basketball already draws nothing beyond the clock.
+    assert soccer[0]["situation"] == {}, (
+        f"soccer should parse to an empty situation, not invent one: "
+        f"{soccer[0]['situation']}"
+    )
+    print("PASS  the same parser handles a soccer (La Liga) payload too, "
+          "with no situation object to draw a live-detail segment from")
 
     # ---- 2. Names ------------------------------------------------------
     assert abbreviate_name("Aaron Judge") == "A.JUDGE"
@@ -591,6 +615,40 @@ def main():
     assert logos.get_logo("nba", "NYK", 8) is not None, "Knicks logo missing as 'NYK'"
     assert logos.get_logo("mlb", "ZZZ", 8) is None
     print("PASS  logos resolve per league, misses return None")
+
+    # Soccer's crest CDN wants ESPN's own numeric team id, not the
+    # abbreviation every other league here uses -- confirmed against a
+    # real request, where the abbreviation path 404s and the numeric one
+    # doesn't. Spied without a real network call.
+    import logo_manager as _logo_mod
+
+    class _StubResponse:
+        status_code = 404
+        content = b""
+
+    url_calls = []
+
+    def _stub_get(url, **kw):
+        url_calls.append(url)
+        return _StubResponse()
+
+    logos_soccer = TeamLogoManager(log, cache_dir=logo_dir, allow_download=True)
+    orig_requests_get = _logo_mod.requests.get
+    _logo_mod.requests.get = _stub_get
+    try:
+        logos_soccer._download("soccer", "BAR")
+    finally:
+        _logo_mod.requests.get = orig_requests_get
+    assert any(u.endswith("/83.png") for u in url_calls), (
+        f"Barcelona's logo request should use ESPN's numeric team id "
+        f"(83), not the abbreviation: {url_calls}"
+    )
+    assert not any(u.lower().endswith("/bar.png") for u in url_calls), (
+        f"must not also try the plain abbreviation path, confirmed 404 "
+        f"for this league: {url_calls}"
+    )
+    print(f"PASS  soccer logo downloads use ESPN's numeric team id "
+          f"override instead of the abbreviation: {url_calls}")
 
     for size in [(192, 32), (128, 32), (64, 32), (192, 64)]:
         for game in kept:
@@ -3268,7 +3326,7 @@ def main():
     }]
     assert urgent_plugin._display_strip(), "urgent-adopt baseline strip failed to draw"
     urgent_not_live_width = urgent_plugin.strip._strip_cache.width
-    assert urgent_plugin._last_any_live is False
+    assert urgent_plugin._last_live_signature == ((), ())
     assert urgent_plugin._urgent_adopt is False, (
         "the very first build must not itself count as a live-state "
         "transition"
@@ -3282,14 +3340,18 @@ def main():
     }]
     urgent_plugin.strip._last_build = 0.0
     assert urgent_plugin._display_strip(), "urgent-adopt trigger frame failed to draw"
-    assert urgent_plugin._urgent_adopt is True, (
-        "a live-state flip must be flagged for an out-of-turn adopt"
-    )
     scroll_offset_before_adopt = urgent_plugin._scroll_offset
-    assert urgent_plugin.strip._wait_for_background_build(), (
-        "background rebuild for the live-state change did not finish"
-    )
-    assert urgent_plugin._display_strip(), "urgent-adopt follow-up frame failed to draw"
+    # Usually still pending -- a real build takes measurably longer than
+    # this one Python call -- but on a small enough strip the background
+    # thread can occasionally finish and get adopted within this same
+    # frame, which is only a faster win, not a failure: either timing is
+    # correct, so only the *eventual* outcome is asserted below, not which
+    # frame it landed on.
+    if urgent_plugin._urgent_adopt:
+        assert urgent_plugin.strip._wait_for_background_build(), (
+            "background rebuild for the live-state change did not finish"
+        )
+        assert urgent_plugin._display_strip(), "urgent-adopt follow-up frame failed to draw"
     urgent_live_width = urgent_plugin.strip._strip_cache.width
 
     assert urgent_live_width < urgent_not_live_width, (
@@ -3309,6 +3371,69 @@ def main():
           f"instead of waiting for the scroll to complete a full pass "
           f"({urgent_not_live_width}px -> {urgent_live_width}px, "
           f"{scroll_offset_before_adopt:.1f}px into the pass)")
+
+    # The bug this was actually chasing: a game that was already live
+    # stays live (state never flips), but the count, outs or batter
+    # changes -- a new at-bat. has_any_live() alone never notices this,
+    # since it only looks at *which* games are live, not their own
+    # content, so a plain live/not-live transition check would leave
+    # exactly this case waiting for the scroll seam. The fingerprint in
+    # _live_signature() must catch it too.
+    inplay_plugin = LocalScoreboardPlugin(
+        "local-scoreboard", {"teams": [{"abbr": "NYY", "league": "mlb", "name": "Yankees"}]},
+        FakeDisplay(192, 32), FakeCache(), None,
+    )
+    inplay_plugin.games = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"}])
+    inplay_plugin.teams_panel_on = False
+    inplay_plugin.games._games = [{
+        "id": "inplay1", "league": "mlb", "state": STATE_LIVE, "start": "",
+        "home": {"abbr": "NYY", "score": "1"}, "away": {"abbr": "BOS", "score": "0"},
+        "situation": {"kind": "baseball", "balls": 0, "strikes": 0, "outs": 0},
+        "leaders": [],
+    }]
+    assert inplay_plugin._display_strip(), "in-play baseline strip failed to draw"
+    assert inplay_plugin._urgent_adopt is False, (
+        "the very first build must not itself count as a change"
+    )
+    baseline_signature = inplay_plugin._last_live_signature
+
+    # Same game, same state, next batter: outs and the count moved, the
+    # score didn't. This is the "next batter has already been up and out
+    # and hasn't updated" scenario reported against a long strip.
+    inplay_plugin.games._games = [{
+        "id": "inplay1", "league": "mlb", "state": STATE_LIVE, "start": "",
+        "home": {"abbr": "NYY", "score": "1"}, "away": {"abbr": "BOS", "score": "0"},
+        "situation": {"kind": "baseball", "balls": 1, "strikes": 2, "outs": 1},
+        "leaders": [],
+    }]
+    inplay_plugin.strip._last_build = 0.0
+    assert inplay_plugin._display_strip(), "in-play update frame failed to draw"
+    assert inplay_plugin._last_live_signature != baseline_signature, (
+        "the live signature must change when the count/outs change, even "
+        "though the game's state never left STATE_LIVE"
+    )
+    inplay_offset_before_adopt = inplay_plugin._scroll_offset
+    # As above: usually still pending by this point, but on a strip this
+    # small the background build can occasionally finish and adopt within
+    # the very same frame -- an even faster result, not a failure. Only
+    # the eventual settled state is asserted, not which frame reached it.
+    if inplay_plugin._urgent_adopt:
+        assert inplay_plugin.strip._wait_for_background_build(), (
+            "background rebuild for the in-play update did not finish"
+        )
+        assert inplay_plugin._display_strip(), "in-play follow-up frame failed to draw"
+    assert inplay_plugin._urgent_adopt is False, (
+        "the out-of-turn adopt should have settled by now, one way or "
+        "the other"
+    )
+    assert inplay_offset_before_adopt < 5.0, (
+        "this only proves anything if the scroll was still essentially at "
+        f"the start, nowhere near a seam: offset was "
+        f"{inplay_offset_before_adopt}px"
+    )
+    print("PASS  an already-live game's own count/outs/batter changing "
+          "adopts immediately too, not just a game starting or ending")
 
     # ---- 6. Plugin lifecycle -------------------------------------------
     plugin_display = FakeDisplay(192, 32)

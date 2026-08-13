@@ -118,16 +118,18 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self._scroll_offset = 0.0
         self._scroll_key = None
         self._scroll_last_ts = 0.0
-        # Whether leaderboards/awards/countdowns were hidden as of the last
-        # frame. adopt_pending() normally only swaps in a rebuilt strip at
-        # the scroll seam, once per full pass -- fine for cosmetic changes,
-        # but a live game starting mid-pass means the old strip (still
-        # showing everything that should now be hidden) can keep scrolling
-        # for minutes on a long strip before the hide actually appears.
-        # Tracking the transition lets a live-state change force an
-        # out-of-turn adopt the moment the rebuild is ready, instead of
-        # waiting for the lap to finish.
-        self._last_any_live = None
+        # A fingerprint of every live game's own score and situation, as of
+        # the last frame. adopt_pending() normally only swaps in a rebuilt
+        # strip at the scroll seam, once per full pass -- fine for cosmetic
+        # changes, but on a long strip that lap can take minutes, during
+        # which a live game starting/ending (leaderboards/awards/countdowns
+        # should hide or reappear) or an already-live game's own score,
+        # count or batter changing would all sit stale on screen despite
+        # the data itself refreshing underneath every few seconds. Any
+        # change to this fingerprint forces an out-of-turn adopt the
+        # moment the rebuild is ready, instead of waiting for the lap to
+        # finish.
+        self._last_live_signature = None
         self._urgent_adopt = False
         # Leaderboard and award segments are rebuilt on a timer, not per
         # frame; the data behind them refetches every few hours.
@@ -731,6 +733,40 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             }
         return out
 
+    @staticmethod
+    def _live_signature(teams_and_games, other_live) -> tuple:
+        """A fingerprint of every currently-live game's own score and
+        situation -- balls, strikes, outs, down and distance, clock, the
+        leader lines ESPN attaches. Anything that changes what a viewer
+        watching that specific game would actually see changing.
+
+        Deliberately not the same as the strip's own build-signature: that
+        one also reflects finals, fixtures, leaderboard rows and every
+        other slower-moving thing on the strip, so comparing it frame to
+        frame would call almost every refresh "urgent". This narrows to
+        just what a live game means by "updated every 5 seconds" -- the
+        game itself, not the strip around it.
+        """
+        def fingerprint(g):
+            situation = g.get("situation") or {}
+            return (
+                g.get("id"), g.get("state"),
+                (g.get("home") or {}).get("score"),
+                (g.get("away") or {}).get("score"),
+                situation.get("balls"), situation.get("strikes"),
+                situation.get("outs"), situation.get("down_distance"),
+                situation.get("clock"), situation.get("period"),
+                tuple(l.get("line", "") for l in (g.get("leaders") or [])),
+            )
+
+        followed = tuple(sorted(
+            fingerprint(g)
+            for _, games in teams_and_games for g in games
+            if g.get("state") == STATE_LIVE
+        ))
+        other = tuple(sorted(fingerprint(g) for g in (other_live or [])))
+        return (followed, other)
+
     def _display_strip(self) -> bool:
         """Scroll one continuous strip carrying every team, and wrap.
 
@@ -798,9 +834,6 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         # has_live(): a live game from outside the followed teams is still
         # a live game competing for the same attention.
         any_live = self.games.has_any_live()
-        if self._last_any_live is not None and any_live != self._last_any_live:
-            self._urgent_adopt = True
-        self._last_any_live = any_live
         boards, awards = self._leaderboards()
         countdown_events = self._countdowns()
         if any_live:
@@ -813,6 +846,13 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             if self.teams_other_live_on else []
         )
         streaks = self._streaks()
+
+        live_signature = self._live_signature(teams_and_games, other_live)
+        if (self._last_live_signature is not None
+                and live_signature != self._last_live_signature):
+            self._urgent_adopt = True
+        self._last_live_signature = live_signature
+
         built = self.strip.build_strip(
             teams_and_games, labels, leaderboards=boards, awards=awards,
             weather=self._weather_data,

@@ -60,6 +60,16 @@ ESPN_ABBR_OVERRIDES: Dict[str, List[str]] = {
     "JAX": ["JAX", "JAC"],
 }
 
+# Soccer's crest CDN is keyed by ESPN's own numeric team id, not the
+# abbreviation the way every other league here is -- confirmed against a
+# real request, where the abbreviation path 404s and the numeric one
+# doesn't. Only entries actually configured need listing; add a team's
+# ESPN id here (visible in ESPN's own team URLs, /soccer/team/_/id/<id>)
+# the first time a new one is followed.
+ESPN_LOGO_ID_OVERRIDES: Dict[str, str] = {
+    "BAR": "83",  # Barcelona
+}
+
 
 class TeamLogoManager:
     """Loads and caches small team logos."""
@@ -144,7 +154,8 @@ class TeamLogoManager:
         os.makedirs(target_dir, exist_ok=True)
 
         for candidate in self._candidates(abbr):
-            url = self.ESPN_LOGO_URL.format(league=league, abbr=candidate.lower())
+            url_path = ESPN_LOGO_ID_OVERRIDES.get(candidate, candidate.lower())
+            url = self.ESPN_LOGO_URL.format(league=league, abbr=url_path)
             try:
                 response = requests.get(url, timeout=10)
                 if response.status_code != 200 or not response.content:

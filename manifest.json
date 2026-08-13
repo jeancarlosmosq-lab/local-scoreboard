@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.39.0",
+  "version": "0.40.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -21,6 +21,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.40.0",
+      "released": "2026-08-12",
+      "notes": "Two changes. (1) An already-live game's own score, count/outs or batter changing now adopts onto the strip immediately, the same out-of-turn adopt that a live game starting/ending already used -- previously only the live/not-live transition counted as urgent, so an in-progress game's own updates could still sit stale on screen for however long was left in the current scroll pass. (2) Added La Liga (soccer) support -- a new 'laliga' league key, Barcelona added as an example follow. Soccer's ESPN data has no situation object (so no live-detail segment, same as basketball) and its crest CDN is keyed by numeric team id rather than abbreviation, handled via a small per-team override table."
+    },
     {
       "version": "0.39.0",
       "released": "2026-08-12",
