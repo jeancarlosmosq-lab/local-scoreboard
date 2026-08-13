@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.47.1",
+  "version": "0.48.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.48.0",
+      "released": "2026-08-13",
+      "notes": "Rebuild throttle brought back down from 15s to 8s. 15s traded away more freshness than the scroll pause actually needed -- measured compose cost on the Pi at ~60ms per rebuild even with font metrics cached, confirming the pause is inherent to doing real drawing work regardless of caching, not something further optimization was going to remove entirely. 8s stays comfortably above the 5s floor that caused the original stutter while keeping worst-case staleness for a live score close to live_interval's own 5s (~13s worst case, ~6-7s typical) rather than triple it."
+    },
     {
       "version": "0.47.1",
       "released": "2026-08-13",

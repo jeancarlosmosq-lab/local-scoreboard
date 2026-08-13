@@ -154,17 +154,22 @@ class StripRenderer:
         # concurrent render thread, visible as a small periodic pause in
         # the scroll. The background thread was never free -- it was
         # competing for the same CPU the matrix output itself needs on
-        # time. First raised to 10s, which helped but left a smaller pause
-        # still noticeable; 15s next, paired with actually cheapening each
-        # composition (see _fit_font/_largest_fit's own memoization) since
-        # widening the gap alone was trading away freshness without fully
-        # solving the underlying cost. Data still refetches every
-        # live_interval regardless; this only widens how often a fetched
-        # change gets turned into a new image, so the worst-case lag for a
-        # live update grows to ~15s while composition itself becomes
-        # roughly a third as frequent as the original 5s.
+        # time.
+        #
+        # Tuned in stages: 10s helped but left a smaller pause still
+        # noticeable; 15s next, paired with memoizing _fit_font/
+        # _largest_fit (composing is real work regardless -- confirmed on
+        # the Pi at ~60ms per rebuild even with that cache warm, so
+        # widening the gap is still the only lever that actually moves the
+        # needle). 15s traded away more freshness than the pause needed,
+        # though -- settled on 8s as the balance: still comfortably above
+        # the 5s floor that caused the original stutter, while keeping
+        # worst-case staleness for a live score close to live_interval's
+        # own 5s rather than triple it. Data still refetches every
+        # live_interval regardless; this only caps how often a fetched
+        # change becomes a new image.
         self._last_build = 0.0
-        self._min_rebuild_interval = 15.0
+        self._min_rebuild_interval = 8.0
         # The actual composition runs on a background thread once something
         # is already on screen, so a rebuild -- still tens to hundreds of ms
         # -- never blocks the render path itself. Confirmed live: at the

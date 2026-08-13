@@ -79,7 +79,7 @@ The same ESPN endpoint shape serves baseball, basketball and football, which is 
 
 Refresh cadence follows the games: **~5 seconds** while any game is live -- a followed team's own, or one elsewhere in the league -- or a followed team's game is about to start, **~60 seconds** otherwise (both configurable). A final from last night doesn't change; a game in progress changes every pitch or possession. Finals have their notable players fetched once and remembered, since a completed box score is settled. Win/loss streaks come from ESPN's own league standings, refreshed every 5 minutes.
 
-That 5-second data refresh reaches the panel quickly too: a live game's own score, count or batter changing is adopted onto the strip as soon as the next rebuild is ready, rather than waiting for the current scroll pass to finish -- on a long strip a full pass can take minutes, which is far too slow for an at-bat. The rebuild itself is capped a little slower than the data (every ~10 seconds, not 5) on purpose: composing a new image is real CPU work, and running it as often as the data itself refreshes measurably competed with the matrix output for CPU on a Pi, confirmed as a small periodic pause in the scroll once any live game elsewhere kept the fast data cadence on for long stretches of the day. Data is never stale by more than one fetch either way -- only how often a fetched change actually becomes a new image is capped.
+That 5-second data refresh reaches the panel quickly too: a live game's own score, count or batter changing is adopted onto the strip as soon as the next rebuild is ready, rather than waiting for the current scroll pass to finish -- on a long strip a full pass can take minutes, which is far too slow for an at-bat. The rebuild itself is capped a little slower than the data (every ~8 seconds, not 5) on purpose: composing a new image is real CPU work -- confirmed on a Pi at tens of milliseconds per rebuild even with font metrics cached -- and running it as often as the data itself refreshes measurably competed with the matrix output for CPU, visible as a small periodic pause in the scroll once any live game elsewhere kept the fast data cadence on for long stretches of the day. Worst case, a live score is ~13 seconds old on screen (5s data + 8s rebuild cap); typical case is closer to half that.
 
 ## Configuration
 
@@ -126,4 +126,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.47.1
+0.48.0
