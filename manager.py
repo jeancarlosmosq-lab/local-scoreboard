@@ -444,19 +444,32 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             return
         now = time.time()
         # Checks for a live game every idle_interval (a minute by default);
-        # once any followed team actually is live, that check itself drops
-        # to live_interval (5s) so a game's own numbers -- balls,
-        # strikes, score -- stay current instead of sitting frozen for most
-        # of a minute. Confirmed on real hardware that the old, much slower
-        # live cadence (45s) left an at-bat's count looking unchanged.
-        # _followed_game_starting_soon() covers the same gap for a game
-        # about to start: has_live() only reflects the previous fetch, so
-        # without it a game beginning near the end of an idle-interval wait
-        # could go undetected for most of that wait too. Everything else on
-        # the strip (leaderboards, other-live, weather) keeps
-        # its own independent interval below -- this only shortens how
-        # often a fetch is even attempted.
-        fast = self.games.has_live() or self.games._followed_game_starting_soon()
+        # once ANY game is live -- has_any_live(), not has_live(), on
+        # purpose -- that check itself drops to live_interval (5s) so a
+        # game's own numbers -- balls, strikes, score -- stay current
+        # instead of sitting frozen for most of a minute. Confirmed on
+        # real hardware that the old, much slower live cadence (45s) left
+        # an at-bat's count looking unchanged. has_live() alone missed the
+        # "live around the league" case entirely: refresh() is one call
+        # that fetches followed teams and other-live games together, not
+        # two independently-timed fetches, so an other-live game with no
+        # followed team also live sat on the slow idle cadence regardless
+        # of how urgently it needed updating -- there is no such thing as
+        # "everything else keeps its own interval" here, contrary to what
+        # an earlier version of this comment claimed.
+        # _followed_game_starting_soon() covers the same gap for a
+        # followed team's game about to start: has_live() only reflects
+        # the previous fetch, so without it a game beginning near the end
+        # of an idle-interval wait could go undetected for most of that
+        # wait too. There's no equivalent "starting soon" check across
+        # every unfollowed team in every league -- that's a much larger
+        # scan for a narrower benefit, so an other-live game only speeds
+        # up once it's actually live, the same one-fetch-behind gap
+        # has_live() alone has for a followed team's own game.
+        fast = (
+            self.games.has_any_live()
+            or self.games._followed_game_starting_soon()
+        )
         gate = self.teams_live_interval if fast else self.teams_idle_interval
         if now - self._last_update < gate and self.games.has_data():
             return
@@ -884,6 +897,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             streaks=streaks,
             weather_show_forecast=weather_show_forecast,
             show_clock=show_clock,
+            weather_show_current=show_clock,
         )
         if built is None:
             return False
@@ -932,6 +946,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                     streaks=streaks,
                     weather_show_forecast=weather_show_forecast,
                     show_clock=show_clock,
+                    weather_show_current=show_clock,
                 )
                 self._scroll_offset = 0.0
                 self.logger.debug(
@@ -983,7 +998,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 countdowns=countdown_events,
                 streaks=self._streaks(),
                 weather_show_forecast=weather_show_forecast,
-                show_clock=panel_game is not None) if pairs else None)
+                show_clock=panel_game is not None,
+                weather_show_current=panel_game is not None) if pairs else None)
             if built is None:
                 return None
             speed = max(1.0, self.teams_scroll_speed)

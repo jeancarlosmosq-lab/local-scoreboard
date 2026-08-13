@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.42.0",
+  "version": "0.44.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,16 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.44.0",
+      "released": "2026-08-12",
+      "notes": "Three weather changes. (1) Forecast shortened from 5 days to 3, and the 3-day forecast (and current conditions) now always show, even during a live game with weather.hide_forecast_when_live turned on -- only the hourly column and moon phase are still gated by that setting, since the 3-day forecast is brief enough not to compete for the same space a live score needs. (2) Current conditions (the icon and plain temperature) now hide from the scroll whenever the static panel is already showing that same reading -- nothing live, so the clock/weather fallback has that slot -- the same duplicate-avoidance already applied to the scroll's own clock last release. (3) Feels-like is not shown on the static panel at all, so it stays up in the scroll regardless of the above, using the icon and single-line treatment the temperature would otherwise get."
+    },
+    {
+      "version": "0.43.0",
+      "released": "2026-08-12",
+      "notes": "A live game outside the followed teams now gets the same fast (5s) refresh cadence a followed team's own live game already had, instead of sitting on the slow 60s idle cadence whenever no followed team happened to also be live. refresh() fetches followed teams and other-live games together in one call, not on two independently-timed schedules, so 'live around the league' needed has_any_live() governing the refresh gate, not has_live() -- the same broader check the leaderboard/awards/countdown hiding already used, now applied to the data-fetch cadence itself, both in the plugin's own update() gate and GamesManager's internal one."
+    },
     {
       "version": "0.42.0",
       "released": "2026-08-12",

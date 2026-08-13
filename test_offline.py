@@ -1607,6 +1607,10 @@ def main():
         {"abbr": "NYM", "league": "mlb", "name": "Mets"},
     ])
     sc_plugin.teams_panel_priority = ["NYY"]
+    orig_sc_build = sc_plugin.strip.build_strip
+    sc_calls = []
+    sc_plugin.strip.build_strip = lambda *a, **k: (
+        sc_calls.append(k.get("weather_show_current")), orig_sc_build(*a, **k))[1]
     sc_plugin.games._games = [{
         "id": "scu1", "league": "mlb", "state": STATE_UPCOMING, "start": "",
         "home": {"abbr": "NYY", "score": ""}, "away": {"abbr": "BOS", "score": ""},
@@ -1620,6 +1624,10 @@ def main():
     assert not sc_plugin.strip._clock_box, (
         "the scroll should not carry its own clock while the static panel "
         "is already showing the clock/weather fallback"
+    )
+    assert sc_calls[-1] is False, (
+        f"weather_show_current must be False alongside show_clock=False -- "
+        f"the panel is already showing current conditions too: {sc_calls}"
     )
 
     sc_plugin.games._games = [{
@@ -1641,8 +1649,12 @@ def main():
         "the scroll should carry its own clock once a live game has taken "
         "over the static panel, since the clock is no longer shown there"
     )
-    print("PASS  the scroll only carries its own clock while a live game "
-          "has taken over the static panel")
+    assert sc_calls[-1] is True, (
+        f"weather_show_current must be True once a live game has taken "
+        f"over the static panel, same as show_clock: {sc_calls}"
+    )
+    print("PASS  the scroll only carries its own clock and current weather "
+          "conditions while a live game has taken over the static panel")
 
     # The refresh gate: check for a live game every idle_interval (a
     # minute by default), and once ANY followed team actually is live --
@@ -1652,9 +1664,10 @@ def main():
     # _followed_game_starting_soon(), so a game beginning near the end of
     # an idle wait is not missed for most of that wait either.
     class _RefreshSpyGames:
-        def __init__(self, games_list, starting_soon=False):
+        def __init__(self, games_list, starting_soon=False, other_live=False):
             self._games_list = games_list
             self._starting_soon = starting_soon
+            self._other_live_flag = other_live
             self.refresh_calls = []
 
         def games(self, state=None):
@@ -1664,6 +1677,9 @@ def main():
 
         def has_live(self):
             return any(g.get("state") == STATE_LIVE for g in self._games_list)
+
+        def has_any_live(self):
+            return self.has_live() or self._other_live_flag
 
         def _followed_game_starting_soon(self):
             return self._starting_soon
@@ -1716,8 +1732,22 @@ def main():
         f"a game starting soon should also force a refresh past the ~5s "
         f"gate: {update_plugin.games.refresh_calls}"
     )
+
+    # A live game outside the followed teams must get the same fast gate
+    # too -- refresh() fetches followed teams and other-live games in one
+    # call, not two independently-timed ones, so "live around the league"
+    # needs has_any_live(), not has_live(), or it sits on the slow idle
+    # cadence whenever no followed team happens to also be live.
+    update_plugin.games = _RefreshSpyGames([], other_live=True)
+    update_plugin._last_update = time.time() - 10
+    update_plugin.update()
+    assert update_plugin.games.refresh_calls == [True], (
+        f"an other-live game with no followed team live should also force "
+        f"a refresh past the ~5s gate: {update_plugin.games.refresh_calls}"
+    )
     print("PASS  update() checks for a live game every ~60s, then drops to "
-          "~5s the moment any followed team is live or about to start")
+          "~5s the moment any game is live anywhere or a followed team is "
+          "about to start")
 
     # The bottom row alternates: 64 pixels will not hold the bases, the count,
     # the outs and a player name at once -- the name truncates to a letter.
@@ -1939,6 +1969,22 @@ def main():
     )
     print("PASS  has_any_live() is true from other-live alone, false when "
           "nothing at all is live")
+
+    # _interval() must also speed up from other-live alone -- refresh()
+    # fetches followed teams and other-live games in the same call, not on
+    # two independently-timed schedules, so "live around the league" needs
+    # the same fast timer a followed team's own live game gets, not the
+    # slow idle one just because no followed team happens to also be live.
+    assert gol._interval() == gol.live_interval, (
+        f"an other-live game with no followed team live should still use "
+        f"the fast timer: interval={gol._interval()}, "
+        f"live={gol.live_interval}, idle={gol.idle_interval}"
+    )
+    assert gol_empty._interval() == gol_empty.idle_interval, (
+        "with nothing live at all, the idle timer is still correct"
+    )
+    print("PASS  _interval() also speeds up from other-live alone, not "
+          "just a followed team's own live game")
 
     # The followed team's own game must never double up in this list
     followed_ids = {g["id"] for g in gol.games()}
@@ -2416,7 +2462,7 @@ def main():
           f"and temperature (gap_above={gap_above}px, "
           f"gap_below={gap_below}px), not pinned to one side of it")
 
-    # "NEXT HOURS"/"5 DAY FORECAST" used to sit at the same top margin the
+    # "NEXT HOURS"/"3 DAY FORECAST" used to sit at the same top margin the
     # column's own day/hour label independently anchored to, using a
     # different (larger) font -- header and content competing for the same
     # rows rather than one sitting above the other. The header's own text
@@ -2460,7 +2506,7 @@ def main():
                                {"name": "THU", "temp": 85, "condition": "Clear"}]}
     rheader._draw_weather(header_img, header_spy, 2, header_weather,
                          header_font, header_row_h)
-    header_ys = [y for y, t in header_spy.calls if t == "5 DAY FORECAST"]
+    header_ys = [y for y, t in header_spy.calls if t == "3 DAY FORECAST"]
     label_ys = [y for y, t in header_spy.calls if t in ("WED", "THU")]
     assert header_ys and label_ys, (
         f"expected both the header and a day label to draw text: "
@@ -2470,7 +2516,7 @@ def main():
         f"the day label should start on a row strictly below the header, "
         f"not share its row: header_y={header_ys}, label_y={label_ys}"
     )
-    print(f"PASS  '5 DAY FORECAST' header sits above its columns' own day "
+    print(f"PASS  '3 DAY FORECAST' header sits above its columns' own day "
           f"labels (header y={min(header_ys)}, column y={min(label_ys)}), "
           f"not sharing a row with them")
 
@@ -2640,10 +2686,11 @@ def main():
           f"passed ({without_w}px -> {with_w}px), within the shared margin")
 
     # show_forecast=False (weather.hide_forecast_when_live, opted into per
-    # install) drops the hourly/5-day columns and the moon phase, but
-    # current conditions -- the "now" temperature -- must still draw, on
-    # the same reasoning that already keeps a weather warning up during a
-    # live game.
+    # install) drops the hourly column and the moon phase, but current
+    # conditions and the 3-day forecast must still draw -- current
+    # conditions on the same reasoning that already keeps a weather
+    # warning up during a live game, the 3-day forecast because it's
+    # brief enough not to compete for the same space a live score needs.
     forecast_weather = dict(moon_weather, hourly=[{"name": "8P", "temp": 77}],
                             daily=[{"name": "MON", "temp": 80}])
     # 2pm, deliberately inside the hourly-forecast's own 6am-8pm daytime
@@ -2661,21 +2708,104 @@ def main():
         hidden_img, hidden_draw, 2, forecast_weather, moon_font, moon_row_h,
         _dt(2026, 8, 12, 14, 0), show_forecast=False)
     assert hidden_w < shown_w, (
-        f"show_forecast=False should drop the forecast/moon columns: "
-        f"shown={shown_w}px, hidden={hidden_w}px"
+        f"show_forecast=False should drop the hourly forecast and moon "
+        f"columns: shown={shown_w}px, hidden={hidden_w}px"
     )
-    now_only_w = rmoonw._draw_weather(
+
+    # The 3-day forecast specifically must survive show_forecast=False --
+    # dropping only "daily" from the same weather dict, at the same
+    # show_forecast=False, must measure narrower still, proving the 3-day
+    # columns were part of what was left in hidden_w above.
+    no_daily_weather = dict(forecast_weather)
+    del no_daily_weather["daily"]
+    hidden_no_daily_w = rmoonw._draw_weather(
         Image.new("RGB", (250, 32), (0, 0, 0)), _MoonID.Draw(
             Image.new("RGB", (250, 32), (0, 0, 0))),
-        2, forecast_weather, moon_font, moon_row_h, None, show_forecast=False)
-    assert hidden_w == now_only_w, (
-        "show_forecast=False with hourly/daily/moon data present should "
-        "measure the same as never having passed them at all -- current "
-        f"conditions only: {hidden_w}px vs {now_only_w}px"
+        2, no_daily_weather, moon_font, moon_row_h,
+        _dt(2026, 8, 12, 14, 0), show_forecast=False)
+    assert hidden_no_daily_w < hidden_w, (
+        f"the 3-day forecast should still be present even with "
+        f"show_forecast=False: with_daily={hidden_w}px, "
+        f"without_daily={hidden_no_daily_w}px"
     )
-    print(f"PASS  show_forecast=False hides the moon phase and forecast "
-          f"columns but keeps current conditions up ({shown_w}px -> "
-          f"{hidden_w}px)")
+    print(f"PASS  show_forecast=False hides the hourly forecast and moon "
+          f"phase but keeps current conditions and the 3-day forecast up "
+          f"({shown_w}px -> {hidden_w}px)")
+
+    # show_current=False hides the icon and plain current-temperature
+    # number -- whatever the static panel is already showing, nothing
+    # live pinned there -- but feels-like is not shown on that panel at
+    # all, so it stays up, using the icon+single-line treatment the
+    # temperature would otherwise get rather than sitting paired under a
+    # hidden number. A spy on the actual text draws is the direct check
+    # here -- width alone can't distinguish "78F" from "FEELS LIKE 85F".
+    class _TextSpyDraw:
+        def __init__(self, inner):
+            self.inner = inner
+            self.texts = []
+
+        def text(self, xy, text, font=None, fill=None):
+            self.texts.append(text)
+            self.inner.text(xy, text, font=font, fill=fill)
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+    feels_weather = {"now_temp": 78, "now_feels": 85, "units": "F",
+                     "now_condition": "Clear", "label": "BAYONNE"}
+
+    def _draw(weather, show_current):
+        img = Image.new("RGB", (250, 32), (0, 0, 0))
+        spy = _TextSpyDraw(_MoonID.Draw(img))
+        w = rmoonw._draw_weather(img, spy, 2, weather, moon_font,
+                                 moon_row_h, show_current=show_current)
+        return spy.texts, w
+
+    current_texts, current_w = _draw(feels_weather, True)
+    feels_texts, feels_w = _draw(feels_weather, False)
+    assert "78F" in current_texts and "FEELS LIKE 85F" in current_texts, (
+        f"show_current=True should draw both the plain temperature and "
+        f"feels-like: {current_texts}"
+    )
+    assert "78F" not in feels_texts, (
+        f"show_current=False must not draw the plain current temperature: "
+        f"{feels_texts}"
+    )
+    assert "FEELS LIKE 85F" in feels_texts, (
+        f"show_current=False must still draw feels-like: {feels_texts}"
+    )
+    assert feels_w > 0
+    print(f"PASS  show_current=False hides the plain current temperature "
+          f"but still draws feels-like ({current_w}px with both -> "
+          f"{feels_w}px feels-like only)")
+
+    # With no feels-like data at all, show_current=False collapses to just
+    # the header -- narrower than with show_current=True, and still
+    # within the shared margin (nothing drawn out of bounds).
+    plain_weather = {"now_temp": 78, "units": "F", "now_condition": "Clear",
+                     "label": "BAYONNE"}
+    plain_texts, plain_w = _draw(plain_weather, False)
+    _, plain_with_current_w = _draw(plain_weather, True)
+    assert plain_texts == ["BAYONNE"], (
+        f"with no feels-like data, show_current=False should draw only "
+        f"the header: {plain_texts}"
+    )
+    assert plain_w < plain_with_current_w, (
+        f"header-only should measure narrower than showing current "
+        f"conditions: plain={plain_w}px, with_current={plain_with_current_w}px"
+    )
+    plain_img = Image.new("RGB", (250, 32), (0, 0, 0))
+    rmoonw._draw_weather(plain_img, _MoonID.Draw(plain_img), 2, plain_weather,
+                         moon_font, moon_row_h, show_current=False)
+    ppx = plain_img.load()
+    lit = [y for y in range(32) for x in range(plain_w)
+           if ppx[x, y] != (0, 0, 0)]
+    assert lit and min(lit) >= 1 and max(lit) <= 30, (
+        f"header-only fallback should still respect the shared 1px "
+        f"top/bottom margin: rows {min(lit)}-{max(lit)}"
+    )
+    print(f"PASS  show_current=False with no feels-like data at all "
+          f"collapses to just the header ({plain_w}px), still within margin")
 
     # The hourly ("NEXT HOURS") column has its own separate 6am-8pm cutoff,
     # unrelated to show_forecast -- an hour-by-hour forecast stops earning

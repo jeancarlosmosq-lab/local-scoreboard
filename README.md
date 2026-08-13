@@ -30,13 +30,15 @@ Status is colour-coded — green in progress, amber upcoming, grey final, orange
 
 ## Weather, moon phase and countdowns
 
-Ahead of the teams: current conditions and an hourly and 5-day forecast from the US National Weather Service (free, keyless), a clock, the moon's current phase, and days-until for any personal dates you configure — a birthday, a holiday, first day of school. Each countdown gets an icon guessed from its own name (a cake for a birthday, a tree for Christmas, a pencil for school, a star otherwise), and reads "TODAY!" on the day itself.
+Ahead of the teams: current conditions and an hourly and 3-day forecast from the US National Weather Service (free, keyless), a clock, the moon's current phase, and days-until for any personal dates you configure — a birthday, a holiday, first day of school. Each countdown gets an icon guessed from its own name (a cake for a birthday, a tree for Christmas, a pencil for school, a star otherwise), and reads "TODAY!" on the day itself.
 
 A live game — any live game, not just a followed team's — hides the season leaderboards, award watch lists and countdowns entirely, since a live score is what the board exists to show right now and everything else competing for the same scroll only pushes it further away. They come back automatically the moment nothing is live; the underlying data keeps refreshing in the background the whole time, so there's no delay when they reappear. This takes effect immediately, not on the strip's next full lap -- a live game starting or ending forces the newly rebuilt strip in right away rather than waiting for the scroll to finish its current pass, which on a long strip could otherwise be minutes away.
 
-Weather's current conditions stay up regardless -- the same reasoning that leads the whole strip with weather in the first place, a warning is more urgent than a live score. The moon phase and hourly/5-day forecast columns follow the same hiding rule as leaderboards, but only if `weather.hide_forecast_when_live` is turned on; it defaults to off, so installs that don't set it keep the original always-shown behaviour.
+Current conditions and the 3-day forecast stay up regardless of a live game -- the same reasoning that leads the whole strip with weather in the first place, a warning is more urgent than a live score, and a 3-day outlook is brief enough not to compete for the same space. The moon phase and hourly forecast column follow the same hiding rule as leaderboards, but only if `weather.hide_forecast_when_live` is turned on; it defaults to off, so installs that don't set it keep the original always-shown behaviour.
 
-The hourly forecast has its own separate cutoff on top of that, always on: shown 6am-8pm, hidden overnight. An hour-by-hour forecast is for deciding what to do with the rest of today; by 8pm it's mostly covering hours you'll be asleep for, and the 5-day forecast (and moon phase) stay up the whole time regardless.
+The hourly forecast has its own separate cutoff on top of that, always on: shown 6am-8pm, hidden overnight. An hour-by-hour forecast is for deciding what to do with the rest of today; by 8pm it's mostly covering hours you'll be asleep for, and the 3-day forecast (and moon phase) stay up the whole time regardless.
+
+Current conditions (the icon and plain temperature) hide from the scroll whenever the static panel is already showing that same reading -- nothing live, so the clock/weather fallback has that slot -- the same duplicate-avoidance as the scroll's own clock. Feels-like isn't shown on the static panel at all, so it stays up in the scroll regardless, using the icon and single-line treatment the temperature would otherwise get rather than sitting paired under a hidden number.
 
 When nothing is live, the leftmost module shows this same clock-and-weather block on its own, pinned in place while the rest of the strip scrolls past — the same slot a live game takes over automatically the moment there is one. The scroll carries its own copy of the clock only while that slot has been taken over by a live game -- otherwise the static panel is already showing the time, and a second copy scrolling past would just be the same clock twice.
 
@@ -73,7 +75,7 @@ ESPN's public scoreboard and summary endpoints for scores, and the US National W
 
 The same ESPN endpoint shape serves baseball, basketball and football, which is why three leagues need only one fetcher.
 
-Refresh cadence follows the games: **~5 seconds** while any followed team is playing (or about to start), **~60 seconds** otherwise (both configurable). A final from last night doesn't change; a game in progress changes every pitch or possession. Finals have their notable players fetched once and remembered, since a completed box score is settled. Win/loss streaks come from ESPN's own league standings, refreshed every 5 minutes.
+Refresh cadence follows the games: **~5 seconds** while any game is live -- a followed team's own, or one elsewhere in the league -- or a followed team's game is about to start, **~60 seconds** otherwise (both configurable). A final from last night doesn't change; a game in progress changes every pitch or possession. Finals have their notable players fetched once and remembered, since a completed box score is settled. Win/loss streaks come from ESPN's own league standings, refreshed every 5 minutes.
 
 That 5-second data refresh reaches the panel just as fast: a live game's own score, count or batter changing is adopted onto the strip immediately rather than waiting for the current scroll pass to finish, the same as a game starting or ending already did -- on a long strip a full pass can take minutes, which is far too slow for an at-bat.
 
@@ -122,4 +124,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.42.0
+0.44.0

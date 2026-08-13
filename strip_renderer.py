@@ -1047,27 +1047,40 @@ class StripRenderer:
 
     def _draw_weather(self, img, draw, x: int, weather: Dict,
                       font, row_h: int, when=None,
-                      show_forecast: bool = True) -> int:
+                      show_forecast: bool = True,
+                      show_current: bool = True) -> int:
         """Weather: now, the next few hours, then the next few days.
 
         An active warning displaces the place name and takes the alert colour.
         A severe thunderstorm warning is the only thing on this board more
         urgent than a live score.
 
-        show_forecast controls the hourly/5-day columns and the moon phase
-        only -- current conditions always draw regardless, on the same
-        reasoning as the warning above: whatever's happening right now
-        outside stays visible even while a live game hides everything else
-        competing for the strip. Off by default from the caller's side
-        (weather.hide_forecast_when_live in config, opt-in per install) --
-        the original design kept the whole block up during a live game on
-        purpose, and this only overrides that for whoever turns it on.
+        show_forecast controls the hourly columns and the moon phase only
+        -- the 3-day forecast and current conditions always draw
+        regardless, current conditions on the same reasoning as the
+        warning above (whatever's happening right now outside stays
+        visible even while a live game hides everything else competing
+        for the strip), the 3-day forecast because it's brief enough not
+        to compete for the same space a live score needs. Off by default
+        from the caller's side (weather.hide_forecast_when_live in
+        config, opt-in per install) -- the original design kept the whole
+        block up during a live game on purpose, and this only overrides
+        that for whoever turns it on.
 
         The hourly column has its own separate cutoff on top of that,
         6am-8pm only, read from `when` -- unlike show_forecast this one is
         not configurable, since it is a fixed daily rhythm rather than a
-        per-install preference. The 5-day forecast and moon phase are not
+        per-install preference. The 3-day forecast and moon phase are not
         affected by it.
+
+        show_current controls the icon and the plain current-temperature
+        number specifically, not the whole "now" block -- feels-like is
+        not a duplicate of anything shown elsewhere and stays up
+        regardless. Off (False) when the static panel is already showing
+        that same current-temperature reading, since a live game hasn't
+        taken that slot over; on (True) once a live game has, the same
+        moment the scroll gains its own copy of the clock for the same
+        reason.
         """
         if not weather:
             return 0
@@ -1084,12 +1097,26 @@ class StripRenderer:
             head_colour = self.UPCOMING
 
         # --- now: icon, temperature, and what it feels like ---------------
+        # show_current controls the icon and the plain current-temperature
+        # number only: whenever the static panel is already showing that
+        # same reading (nothing live pinned there), a second copy scrolling
+        # past is just a duplicate. Feels-like is not a duplicate of
+        # anything the panel shows -- it's scroll-only content -- so it
+        # stays up regardless, using the same icon+single-line treatment
+        # the temperature would otherwise get, not left paired under a
+        # hidden number.
         now_temp = weather.get("now_temp")
         if now_temp is None:
             now_temp = weather.get("temp")
         feels = weather.get("now_feels")
         show_feels = feels is not None and now_temp is not None and feels != now_temp
-        text_rows = 2 if show_feels else 1
+
+        if show_current:
+            text_rows = 2 if show_feels else 1
+        elif feels is not None:
+            text_rows = 1
+        else:
+            text_rows = 0
 
         # The header and the now-content are centred together as one block,
         # not the header fixed at the very top with only the content below
@@ -1097,7 +1124,9 @@ class StripRenderer:
         # leaves the *combined* header-plus-content sitting high, with a
         # thin gap above the header and a much larger one below the content
         # -- the same top-anchoring mistake one level up.
-        content_h = max(min(16, self.height), text_rows * row_h)
+        content_h = (
+            max(min(16, self.height), text_rows * row_h) if text_rows else 0
+        )
         total_h = row_h + 1 + content_h
         available = self.height - self.MARGIN * 2
         slack = max(0, available - total_h)
@@ -1107,31 +1136,38 @@ class StripRenderer:
         draw.text((x, head_y), self._safe(head), font=font, fill=head_colour)
         block = self._measure(draw, head, font)[0]
 
-        now_top = block_top + row_h + 1
-        icon_size = min(16, content_h)
-        icon_top = now_top + max(0, (content_h - icon_size) // 2)
-        text_top = now_top + max(0, (content_h - text_rows * row_h) // 2)
-
-        condition = weather.get("now_condition") or weather.get("condition") or ""
         cursor = x
-        cursor += self._draw_weather_icon(
-            draw, cursor, icon_top, icon_size,
-            self.condition_kind(condition)) + 3
+        if content_h:
+            now_top = block_top + row_h + 1
+            icon_size = min(16, content_h)
+            icon_top = now_top + max(0, (content_h - icon_size) // 2)
+            text_top = now_top + max(0, (content_h - text_rows * row_h) // 2)
 
-        if now_temp is not None:
-            big = f"{now_temp}{unit}"
-            draw.text((cursor, self._text_top(draw, font, text_top)),
-                      self._safe(big), font=font, fill=self.VALUE)
-            width = self._measure(draw, big, font)[0]
-            if show_feels:
-                # Written out in full -- this is a scrolling strip, not a
-                # fixed-width panel, so there is no space pressure forcing
-                # an abbreviation that a viewer has to decode.
+            condition = weather.get("now_condition") or weather.get("condition") or ""
+            cursor = x
+            cursor += self._draw_weather_icon(
+                draw, cursor, icon_top, icon_size,
+                self.condition_kind(condition)) + 3
+
+            if show_current and now_temp is not None:
+                big = f"{now_temp}{unit}"
+                draw.text((cursor, self._text_top(draw, font, text_top)),
+                          self._safe(big), font=font, fill=self.VALUE)
+                width = self._measure(draw, big, font)[0]
+                if show_feels:
+                    # Written out in full -- this is a scrolling strip, not
+                    # a fixed-width panel, so there is no space pressure
+                    # forcing an abbreviation that a viewer has to decode.
+                    text = f"FEELS LIKE {feels}{unit}"
+                    draw.text((cursor, self._text_top(draw, font, text_top + row_h)),
+                              self._safe(text), font=font, fill=self.DIM)
+                    width = max(width, self._measure(draw, text, font)[0])
+                cursor += width + 6
+            elif not show_current and feels is not None:
                 text = f"FEELS LIKE {feels}{unit}"
-                draw.text((cursor, self._text_top(draw, font, text_top + row_h)),
-                          self._safe(text), font=font, fill=self.DIM)
-                width = max(width, self._measure(draw, text, font)[0])
-            cursor += width + 6
+                draw.text((cursor, self._text_top(draw, font, text_top)),
+                          self._safe(text), font=font, fill=self.VALUE)
+                cursor += self._measure(draw, text, font)[0] + 6
 
         block = max(block, cursor - x)
         x += block + 6
@@ -1162,17 +1198,20 @@ class StripRenderer:
             x = max(x + self._measure(draw, "NEXT HOURS", font)[0], column) + 4
 
         # --- next days ----------------------------------------------------
+        # Not gated by show_forecast -- unlike the hourly column and the
+        # moon phase, this stays up through a live game too, per the same
+        # "brief enough not to compete" reasoning as current conditions.
         daily = [d for d in (weather.get("daily") or []) if d.get("temp") is not None]
-        if show_forecast and daily:
+        if daily:
             x += self._draw_divider(img, draw, x)
             draw.text((x, self._text_top(draw, font, self.MARGIN)),
-                      "5 DAY FORECAST", font=font, fill=self.DIM)
+                      "3 DAY FORECAST", font=font, fill=self.DIM)
             column = x
-            for entry in daily[:5]:
+            for entry in daily[:3]:
                 column += self._draw_forecast_column(
                     draw, column, entry, font, row_h, unit,
                     content_top=forecast_content_top)
-            x = max(x + self._measure(draw, "5 DAY FORECAST", font)[0], column) + 4
+            x = max(x + self._measure(draw, "3 DAY FORECAST", font)[0], column) + 4
 
         # --- moon -----------------------------------------------------------
         if show_forecast and when is not None:
@@ -1581,7 +1620,8 @@ class StripRenderer:
     def build_strip(self, teams_and_games, start_labels=None, leaderboards=None,
                     weather=None, clock=None, awards=None,
                     other_live=None, team_mvps=None, countdowns=None,
-                    streaks=None, weather_show_forecast=True, show_clock=True):
+                    streaks=None, weather_show_forecast=True, show_clock=True,
+                    weather_show_current=True):
         """One continuous strip across every team.
 
         A single image rather than one per team: the board then scrolls
@@ -1618,7 +1658,7 @@ class StripRenderer:
                 (weather or {}).get("next_temp"),
                 (weather or {}).get("now_condition"),
                 tuple(a.get("event", "") for a in (weather or {}).get("alerts", [])),
-                bool(weather_show_forecast),
+                bool(weather_show_forecast), bool(weather_show_current),
             ),
             tuple(
                 sorted((k, v.get("name", ""), v.get("short_name", ""),
@@ -1656,7 +1696,7 @@ class StripRenderer:
             strip, clock_state = self._compose_strip(
                 teams_and_games, start_labels, leaderboards, weather, clock,
                 awards, other_live, team_mvps, countdowns, streaks,
-                weather_show_forecast, show_clock,
+                weather_show_forecast, show_clock, weather_show_current,
             )
             self._strip_key = signature
             self._strip_cache = strip
@@ -1679,6 +1719,7 @@ class StripRenderer:
                 signature, teams_and_games, start_labels, leaderboards,
                 weather, clock, awards, other_live, team_mvps, countdowns,
                 streaks, weather_show_forecast, show_clock,
+                weather_show_current,
             )
         return self._strip_cache
 
@@ -1687,7 +1728,8 @@ class StripRenderer:
                                     clock, awards, other_live, team_mvps,
                                     countdowns, streaks,
                                     weather_show_forecast=True,
-                                    show_clock=True) -> None:
+                                    show_clock=True,
+                                    weather_show_current=True) -> None:
         """Compose the next strip off the render thread, so the scroll
         never waits on it -- only the finished image, swapped in at
         adopt_pending()'s next seam, is ever shared back with the caller.
@@ -1700,7 +1742,7 @@ class StripRenderer:
                 strip, clock_state = self._compose_strip(
                     teams_and_games, start_labels, leaderboards, weather,
                     clock, awards, other_live, team_mvps, countdowns, streaks,
-                    weather_show_forecast, show_clock,
+                    weather_show_forecast, show_clock, weather_show_current,
                 )
             except Exception:
                 self.logger.error(
@@ -1744,7 +1786,8 @@ class StripRenderer:
                        weather, clock, awards, other_live, team_mvps,
                        countdowns, streaks,
                        weather_show_forecast: bool = True,
-                       show_clock: bool = True):
+                       show_clock: bool = True,
+                       weather_show_current: bool = True):
         """The actual drawing work -- tens of milliseconds, hundreds on a
         Pi. Safe to run off the main thread: everything it touches is
         either local to this call (the scratch canvas, its font) or the
@@ -1796,7 +1839,8 @@ class StripRenderer:
 
         if weather:
             added = self._draw_weather(scratch, draw, x, weather, font, row_h,
-                                       clock, show_forecast=weather_show_forecast)
+                                       clock, show_forecast=weather_show_forecast,
+                                       show_current=weather_show_current)
             if added:
                 x += added
                 x += self._draw_divider(scratch, draw, x)

@@ -261,21 +261,32 @@ class GamesManager:
         return self.has_live() or bool(self._other_live)
 
     def _interval(self) -> int:
-        """Short timer while a followed team is playing -- or is about to.
+        """Short timer while any game is playing -- or a followed one is
+        about to.
 
-        has_live() only ever reflects the *previous* fetch. A game that
-        crosses from upcoming to live in between two long, idle-interval
-        checks would otherwise sit undetected for most of that gap -- up
-        to idle_interval itself, since nothing shortens the timer until a
-        refresh actually happens to notice. Checking each followed game's
-        own start time closes that gap: the short timer kicks in shortly
-        before first pitch and stays until either the state flips to live
-        (has_live() then keeps it short on its own) or the game is well
-        past its scheduled start without one, at which point a delay or
+        has_any_live(), not has_live(): refresh() fetches followed teams
+        and other-live games together in one call, not on two
+        independently-timed schedules, so an other-live game with no
+        followed team also live still needs the fast timer to actually
+        stay current -- otherwise "live around the league" sat on the
+        slow idle cadence regardless of how urgently it needed updating.
+
+        has_any_live() only ever reflects the *previous* fetch. A game
+        that crosses from upcoming to live in between two long,
+        idle-interval checks would otherwise sit undetected for most of
+        that gap -- up to idle_interval itself, since nothing shortens the
+        timer until a refresh actually happens to notice. Checking each
+        followed game's own start time closes that gap for a followed
+        team specifically: the short timer kicks in shortly before first
+        pitch and stays until either the state flips to live (has_live()
+        then keeps it short on its own) or the game is well past its
+        scheduled start without one, at which point a delay or
         postponement is as likely as a slow status flip and the idle timer
-        is the sane default again.
+        is the sane default again. There's no equivalent check across
+        every unfollowed team in every league -- an other-live game only
+        speeds things up once it's actually live.
         """
-        if self.has_live() or self._followed_game_starting_soon():
+        if self.has_any_live() or self._followed_game_starting_soon():
             return self.live_interval
         return self.idle_interval
 
