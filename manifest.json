@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.40.0",
+  "version": "0.41.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -18,9 +18,15 @@
   "display_modes": [
     "local_scoreboard"
   ],
+  "update_interval": 1,
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.41.0",
+      "released": "2026-08-12",
+      "notes": "Root-caused the real source of live-game lag: LEDMatrix's own scheduler only calls this plugin's update() as often as the manifest's update_interval says, separate from and outside this plugin's own idle_interval/live_interval gates -- an unset value falls back to the framework's hardcoded 60 seconds regardless of how urgently live_interval=5 wanted to run sooner. update_interval was set once in an earlier version, then removed on the mistaken belief it duplicated idle_interval's job; restoring it (1s) is what actually lets live_interval govern the real refresh cadence, confirmed against real journalctl output where refreshes were a full minute apart during a live game despite everything downstream saying 5s. Also shortened win/loss streaks from a 30-minute refresh to 5 minutes -- a streak sitting visibly one game behind for up to half an hour after a game goes final read as wrong, not just slow."
+    },
     {
       "version": "0.40.0",
       "released": "2026-08-12",

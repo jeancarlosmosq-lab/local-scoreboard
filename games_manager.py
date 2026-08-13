@@ -471,7 +471,7 @@ class GamesManager:
             if state == STATE_FINAL:
                 self._leaders_fetched.add(key)
 
-    def refresh_streaks(self, interval: float = 1800.0) -> None:
+    def refresh_streaks(self, interval: float = 300.0) -> None:
         """Each followed league's standings, on a slow timer.
 
         A streak only changes once a final actually lands, and standings
@@ -479,6 +479,12 @@ class GamesManager:
         this on the same cadence as live games, or even every time update()
         runs. One request per followed league, not per team: standings
         already return the whole league's teams in one response.
+
+        Five minutes, not thirty: a streak sitting visibly one game behind
+        for up to half an hour after a game actually goes final read as
+        stale/wrong to a viewer checking right after the last out, and a
+        standings request is cheap enough that five minutes costs nothing
+        extra worth avoiding.
         """
         if not self.source:
             return

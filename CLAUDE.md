@@ -47,6 +47,37 @@ If you don't have Pi access in this session, say so explicitly rather than
 asserting a layout fix works. A sandbox-only render is not sufficient
 evidence for anything involving font metrics.
 
+## The second most important thing: manifest `update_interval` gates everything
+
+LEDMatrix's own scheduler decides how often to even call this plugin's
+`update()` — see `plugin_manager.py`'s `_get_plugin_update_interval()` on the
+Pi. It checks the manifest's top-level `update_interval` first, then a
+`update_interval` key in this plugin's own config.json entry, and **falls
+back to a hardcoded 60 seconds if neither is set.** This is a completely
+different layer from `idle_interval`/`live_interval` in this plugin's own
+config: those decide what `update()` *does* once it runs (whether to
+actually refetch), `update_interval` decides whether it runs *at all*.
+
+`update_interval` was set once, then removed in an earlier version on the
+belief that it "duplicated idle_interval's old role" — it doesn't. Losing it
+silently capped every refresh this plugin does (live scores, streaks,
+weather) at once a minute, no matter how urgently `live_interval=5` wanted
+to run sooner. Nothing in `test_offline.py` could catch this: it is entirely
+the host framework's behavior, invisible to any test that only exercises
+this plugin's own code. It was only found by reading real `journalctl`
+output during an actual live game and noticing "Refreshed games" log lines
+were a full minute apart despite `live_interval=5` and a log line that
+itself said "next check 5s" — the internal gate was working exactly as
+written, it just wasn't being given the chance to run.
+
+`test_offline.py` now asserts `update_interval` stays present and small in
+`manifest.json`, but that only catches a regression in this exact form — if
+this stops working again, re-read `plugin_manager.py`'s
+`_get_plugin_update_interval()` on the Pi directly rather than assuming the
+plugin's own refresh logic is at fault; the plugin's own gates can be
+completely correct while a framework-level scheduling default overrides them
+invisibly.
+
 ## Text positioning: always use `_text_top` / `_text_bottom` / `_vblock_start`
 
 Never call `draw.text((x, N), ...)` with a bare row number. This font

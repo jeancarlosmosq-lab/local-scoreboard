@@ -71,7 +71,7 @@ ESPN's public scoreboard and summary endpoints for scores, and the US National W
 
 The same ESPN endpoint shape serves baseball, basketball and football, which is why three leagues need only one fetcher.
 
-Refresh cadence follows the games: **~5 seconds** while any followed team is playing (or about to start), **~60 seconds** otherwise (both configurable). A final from last night doesn't change; a game in progress changes every pitch or possession. Finals have their notable players fetched once and remembered, since a completed box score is settled. Win/loss streaks come from ESPN's own league standings, refreshed on a much slower half-hour cadence.
+Refresh cadence follows the games: **~5 seconds** while any followed team is playing (or about to start), **~60 seconds** otherwise (both configurable). A final from last night doesn't change; a game in progress changes every pitch or possession. Finals have their notable players fetched once and remembered, since a completed box score is settled. Win/loss streaks come from ESPN's own league standings, refreshed every 5 minutes.
 
 That 5-second data refresh reaches the panel just as fast: a live game's own score, count or batter changing is adopted onto the strip immediately rather than waiting for the current scroll pass to finish, the same as a game starting or ending already did -- on a long strip a full pass can take minutes, which is far too slow for an at-bat.
 
@@ -120,4 +120,4 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 
 ## Version
 
-0.40.0
+0.41.0

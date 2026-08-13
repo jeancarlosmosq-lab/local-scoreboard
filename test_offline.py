@@ -1939,6 +1939,17 @@ def main():
           "throttles a league that succeeded, retries one that failed, "
           "and a failure does not wipe out data from a successful league")
 
+    import inspect as _inspect
+    default_streak_interval = _inspect.signature(
+        GamesManager.refresh_streaks).parameters["interval"].default
+    assert default_streak_interval <= 300.0, (
+        f"a streak sitting stale for up to 30 minutes after a game goes "
+        f"final reads as wrong, not just slow -- default interval is "
+        f"{default_streak_interval}s, expected 300s or less"
+    )
+    print(f"PASS  refresh_streaks() defaults to a {default_streak_interval:.0f}s "
+          f"interval, not the old 30-minute one")
+
     # The banner draws the streak in a distinct colour for a win streak vs
     # a loss streak, and draws nothing extra when there is none to report.
     from PIL import ImageDraw as _StreakID
@@ -3464,11 +3475,41 @@ def main():
     # through the dead slots, which reads as the board freezing.
     import json as _json
     with open("manifest.json") as _mf:
-        declared = _json.load(_mf)["display_modes"]
+        _manifest = _json.load(_mf)
+    declared = _manifest["display_modes"]
     assert declared == ["local_scoreboard"], f"manifest declares dead modes: {declared}"
     assert plugin.get_available_modes() == ["local_scoreboard"]
     assert plugin.display("local_scoreboard") is True
     print("PASS  one declared mode, so no rotation slot can stall")
+
+    # LEDMatrix's own scheduler only calls a plugin's update() as often as
+    # the manifest's own "update_interval" says -- confirmed by reading
+    # plugin_manager.py directly, where an unset value falls back to a
+    # hardcoded 60s regardless of what this plugin's own live_interval
+    # wants. This was set once already, then removed in a past version on
+    # the mistaken belief that it duplicated idle_interval/live_interval's
+    # job -- it doesn't: those decide what THIS plugin does once update()
+    # runs, update_interval decides whether update() runs at all. Losing
+    # it silently capped every refresh (live scores, streaks, weather) at
+    # once a minute no matter how urgently the plugin's own logic wanted
+    # to run sooner, and nothing in this offline suite could catch that,
+    # since it is entirely the host framework's behavior -- confirmed
+    # missing by reading the real framework source and the real device's
+    # own logs, which showed refreshes a full minute apart during a live
+    # game despite live_interval=5.
+    assert "update_interval" in _manifest, (
+        "update_interval must stay set in the manifest -- without it "
+        "every refresh is capped at the framework's own 60s default, "
+        "regardless of idle_interval/live_interval"
+    )
+    assert _manifest["update_interval"] <= 5, (
+        f"update_interval must stay well under live_interval's default "
+        f"(5s) or a live game's own updates cannot arrive any faster "
+        f"than this: {_manifest['update_interval']}"
+    )
+    print(f"PASS  manifest declares update_interval={_manifest['update_interval']}s "
+          f"so the framework calls update() often enough for live_interval "
+          f"to actually govern the real refresh cadence")
 
     # The card layout still works for anyone who prefers it
     plugin.on_config_change({"layout": "cards"})
