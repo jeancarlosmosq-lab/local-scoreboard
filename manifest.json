@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.64.0",
+  "version": "0.64.1",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.64.1",
+      "released": "2026-08-16",
+      "notes": "Funny chaos gags: rotating joke banners (UH OH, DINO DID IT, DON'T TELL DAD, …) plus a goofy grin on the smash flash so the wreckage stays silly for kids."
+    },
     {
       "version": "0.64.0",
       "released": "2026-08-16",

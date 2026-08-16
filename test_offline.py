@@ -4788,6 +4788,8 @@ def main():
             for y in range(32) for x in range(0, 192, 4)
         ), tt
     assert phases >= {"cracks", "glitch", "interrupt", "smash"}, phases
+    assert _kid_art.funny_gag(0) in _kid_art.FUNNY_GAGS
+    assert _kid_art.funny_gag(25) != _kid_art.funny_gag(0)
     print("PASS  kid fun-art bumpers draw, animate, and widen the strip")
 
     # Daily condensation: daytime highs only, Title Case labels, unit convert.

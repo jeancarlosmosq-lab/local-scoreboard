@@ -478,14 +478,87 @@ def blit(draw, x: int, y: int, sprite_id: str, scale: int = 2,
     return w * scale, h * scale
 
 
+# Short enough to fit a 192px panel with the tiny default font.
+FUNNY_GAGS: Tuple[str, ...] = (
+    "UH OH",
+    "WHOOPS!",
+    "HEHEHE",
+    "DINO DID IT",
+    "NOT A BUG",
+    "OOPSIE",
+    "PIXELS OUT",
+    "CALL MOM",
+    "BRB FIXING",
+    "IT WAS THE CAT",
+    "FAKE ERROR",
+    "DON'T TELL DAD",
+    "SCREEN GO BOOM",
+    "LOL BROKE",
+    "WIGGLE TIME",
+    "TOASTY!",
+    "NOPE NOPE",
+    "SCORE? LOL",
+)
+
+
+def funny_gag(t: float) -> str:
+    """Rotate a silly one-liner so each interrupt feels fresh."""
+    if not FUNNY_GAGS:
+        return "UH OH"
+    return FUNNY_GAGS[int(t / 10.0) % len(FUNNY_GAGS)]
+
+
+def _draw_gag_banner(draw, img, text: str, y: Optional[int] = None) -> None:
+    """A black bar with a bright joke so kids can actually read it."""
+    try:
+        from PIL import ImageFont
+        font = ImageFont.load_default()
+    except Exception:
+        return
+    w, h = img.size
+    text = (text or "UH OH")[:18]
+    try:
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    except Exception:
+        tw, th = len(text) * 6, 8
+    bar_h = max(th + 4, 10)
+    by = h // 2 - bar_h // 2 if y is None else max(0, min(h - bar_h, y))
+    draw.rectangle([0, by, w - 1, by + bar_h - 1], fill=(0, 0, 0))
+    # Cheeky rainbow-ish edge.
+    draw.line([(0, by), (w - 1, by)], fill=Y)
+    draw.line([(0, by + bar_h - 1), (w - 1, by + bar_h - 1)], fill=P)
+    tx = max(2, (w - tw) // 2)
+    ty = by + max(1, (bar_h - th) // 2)
+    draw.text((tx, ty), text, font=font, fill=Y)
+
+
+def _draw_silly_face(draw, cx: int, cy: int, scale: int = 2) -> None:
+    """A goofy face in the smash -- fascinates kids more than abstract sparks."""
+    # Eyes
+    for ox in (-3, 3):
+        draw.rectangle(
+            [cx + ox * scale - scale, cy - 2 * scale,
+             cx + ox * scale + scale - 1, cy - scale],
+            fill=W)
+        draw.point((cx + ox * scale, cy - 2 * scale), fill=K)
+    # Big grin
+    for i in range(-4, 5):
+        draw.point((cx + i * scale, cy + 2 * scale), fill=Y)
+    draw.point((cx - 4 * scale, cy + scale), fill=Y)
+    draw.point((cx + 4 * scale, cy + scale), fill=Y)
+    # Tongue
+    draw.rectangle(
+        [cx - scale, cy + 2 * scale, cx + scale - 1, cy + 4 * scale], fill=P)
+
+
 def apply_screen_chaos(img, t: float) -> str:
-    """Make the whole panel look cracked and interrupted.
+    """Make the whole panel look cracked, interrupted, and a little silly.
 
     Runs on the final frame (scores + static panel) so kids see the
     *display itself* glitching -- not just a tiny bumper. Cycles through
     calm cracks → spreading fractures → signal tears → a smash flash,
-    then settles, so scores stay readable most of the time but the board
-    keeps surprising them.
+    with rotating joke banners so it stays funny, not just noisy.
 
     Returns the active phase name (for tests / logging).
     """
@@ -503,6 +576,7 @@ def apply_screen_chaos(img, t: float) -> str:
     u = t % cycle
     seed = int(t * 12)
     draw = _ID.Draw(img)
+    gag = funny_gag(t)
 
     def rnd(i: int, mod: int) -> int:
         return abs((seed * 1103515245 + i * 9973) >> 8) % max(1, mod)
@@ -533,6 +607,9 @@ def apply_screen_chaos(img, t: float) -> str:
                     img.putpixel((px, py), _CRACK if step % 2 else _STATIC)
                     if px + 1 < w:
                         img.putpixel((px + 1, py), _DEBRIS[i % len(_DEBRIS)])
+        # Tiny floating laugh near the end of the crack phase.
+        if u > 2.5:
+            _draw_gag_banner(draw, img, "HEHE", y=1)
 
     elif u < 6.5:
         phase = "glitch"
@@ -563,6 +640,7 @@ def apply_screen_chaos(img, t: float) -> str:
             px = rnd(40 + i, w)
             py = rnd(50 + i, h)
             img.putpixel((px, py), _DEBRIS[rnd(i, len(_DEBRIS))])
+        _draw_gag_banner(draw, img, gag)
 
     elif u < 8.0:
         phase = "interrupt"
@@ -582,6 +660,7 @@ def apply_screen_chaos(img, t: float) -> str:
                     img.putpixel((cx, y), _DEBRIS[rnd(y, len(_DEBRIS))])
                     if cx + 1 < w:
                         img.putpixel((cx + 1, y), (0, 0, 0))
+        _draw_gag_banner(draw, img, gag)
 
     else:
         phase = "smash"
@@ -613,6 +692,8 @@ def apply_screen_chaos(img, t: float) -> str:
             py = int(cy + math.sin(ang) * birth * h * 0.8 + birth * birth * 8)
             if 0 <= px < w and 0 <= py < h:
                 img.putpixel((px, py), _DEBRIS[i % len(_DEBRIS)])
+        _draw_silly_face(draw, cx, max(6, cy - 4), scale=2)
+        _draw_gag_banner(draw, img, gag, y=h - 11)
 
     return phase
 
