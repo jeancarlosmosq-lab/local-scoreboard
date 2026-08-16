@@ -252,8 +252,9 @@ SPRITE_ORDER: Tuple[str, ...] = (
 # Handmade procedural birds -- not licensed characters.
 
 FLYER_ORDER: Tuple[str, ...] = (
-    "hawk", "cardinal", "eagle", "bluejay", "owl",
-    "hummingbird", "flamingo", "robin", "macaw", "pelican",
+    "hawk", "swan", "cardinal", "crow", "eagle", "seagull",
+    "bluejay", "penguin", "owl", "heron", "hummingbird", "toucan",
+    "flamingo", "woodpecker", "robin", "goose", "macaw", "pelican",
 )
 FLYERS: Dict[str, str] = {name: name for name in FLYER_ORDER}
 
@@ -594,6 +595,182 @@ def _render_pelican(size: int, frame: int, progress: float):
     return im.resize((w, h), resample=_RESAMPLE)
 
 
+def _render_swan(size: int, frame: int, progress: float):
+    from PIL import Image as _Im
+    im, d, cx, cy, w, h = _bird_canvas(size, 1.7)
+    # White body floating
+    d.ellipse([cx - 28, cy - 2, cx + 18, cy + 20], fill=(220, 220, 230, 255))
+    d.ellipse([cx - 20, cy + 2, cx + 12, cy + 16], fill=(250, 250, 255, 255))
+    # S-curve neck
+    d.ellipse([cx + 8, cy - 10, cx + 22, cy + 8], fill=(240, 240, 248, 255))
+    d.ellipse([cx + 2, cy - 24, cx + 18, cy - 8], fill=(250, 250, 255, 255))
+    d.ellipse([cx + 14, cy - 30, cx + 30, cy - 14], fill=(245, 245, 252, 255))
+    # Orange beak + black lore
+    d.polygon([(cx + 28, cy - 24), (cx + 46, cy - 20), (cx + 28, cy - 16)],
+              fill=(240, 140, 40, 255))
+    d.ellipse([cx + 24, cy - 26, cx + 32, cy - 18], fill=(20, 20, 25, 255))
+    d.ellipse([cx + 18, cy - 26, cx + 23, cy - 21], fill=(15, 15, 20, 255))
+    # Wing lift
+    lift = -4 if frame % 2 == 0 else 2
+    d.ellipse([cx - 24, cy - 8 + lift, cx - 2, cy + 10 + lift],
+              fill=(230, 230, 240, 240))
+    # Water ripple
+    d.ellipse([cx - 16, cy + 18, cx + 20, cy + 26], fill=(120, 180, 230, 100))
+    return im.resize((w, h), resample=_RESAMPLE)
+
+
+def _render_crow(size: int, frame: int, progress: float):
+    from PIL import Image as _Im
+    im, d, cx, cy, w, h = _bird_canvas(size, 1.55)
+    flap = 1.0 if frame % 2 == 0 else -0.8
+    _draw_soaring_wings(d, cx, cy, flap, (
+        (15, 15, 20), (40, 40, 50), (70, 70, 80),
+    ), spread_base=14)
+    d.ellipse([cx - 16, cy - 8, cx + 14, cy + 12], fill=(30, 30, 35, 255))
+    d.ellipse([cx - 10, cy - 4, cx + 10, cy + 8], fill=(55, 55, 65, 255))
+    d.ellipse([cx + 6, cy - 12, cx + 24, cy + 2], fill=(25, 25, 30, 255))
+    d.polygon([(cx + 22, cy - 4), (cx + 36, cy), (cx + 22, cy + 2)],
+              fill=(20, 20, 25, 255))
+    d.ellipse([cx + 12, cy - 8, cx + 17, cy - 3], fill=(220, 200, 40, 255))
+    d.ellipse([cx + 13, cy - 7, cx + 16, cy - 4], fill=(10, 10, 12, 255))
+    d.polygon([(cx - 14, cy + 2), (cx - 30, cy + 6), (cx - 12, cy + 10)],
+              fill=(20, 20, 28, 255))
+    return im.resize((w, h), resample=_RESAMPLE)
+
+
+def _render_seagull(size: int, frame: int, progress: float):
+    from PIL import Image as _Im
+    im, d, cx, cy, w, h = _bird_canvas(size, 1.85)
+    flap = 1.0 if frame % 2 == 0 else -0.6
+    _draw_soaring_wings(d, cx, cy, flap, (
+        (160, 165, 175), (210, 210, 220), (245, 245, 250),
+    ), spread_base=18)
+    d.ellipse([cx - 16, cy - 6, cx + 14, cy + 12], fill=(235, 235, 240, 255))
+    d.ellipse([cx - 10, cy, cx + 12, cy + 12], fill=(180, 185, 195, 255))  # gray back
+    d.ellipse([cx + 6, cy - 12, cx + 24, cy + 2], fill=(250, 250, 255, 255))
+    d.polygon([(cx + 22, cy - 4), (cx + 38, cy), (cx + 22, cy + 2)],
+              fill=(240, 170, 40, 255))
+    d.ellipse([cx + 12, cy - 8, cx + 17, cy - 3], fill=(20, 20, 25, 255))
+    d.polygon([(cx - 14, cy + 4), (cx - 28, cy + 2), (cx - 16, cy + 12)],
+              fill=(90, 95, 105, 255))
+    return im.resize((w, h), resample=_RESAMPLE)
+
+
+def _render_penguin(size: int, frame: int, progress: float):
+    from PIL import Image as _Im
+    im, d, cx, cy, w, h = _bird_canvas(size, 1.05)
+    wobble = 3 if frame % 2 == 0 else -3
+    cx += wobble
+    # Black back / white belly
+    d.ellipse([cx - 16, cy - 18, cx + 16, cy + 22], fill=(25, 25, 35, 255))
+    d.ellipse([cx - 12, cy - 10, cx + 12, cy + 20], fill=(245, 245, 250, 255))
+    d.ellipse([cx - 14, cy - 20, cx + 14, cy - 2], fill=(20, 20, 28, 255))
+    # Face
+    d.ellipse([cx - 8, cy - 18, cx + 8, cy - 4], fill=(250, 250, 255, 255))
+    d.ellipse([cx - 6, cy - 14, cx - 2, cy - 10], fill=(15, 15, 20, 255))
+    d.ellipse([cx + 2, cy - 14, cx + 6, cy - 10], fill=(15, 15, 20, 255))
+    d.polygon([(cx - 2, cy - 8), (cx + 2, cy - 8), (cx, cy - 2)],
+              fill=(240, 150, 40, 255))
+    # Flippers
+    d.ellipse([cx - 22, cy - 4, cx - 12, cy + 12], fill=(30, 30, 40, 255))
+    d.ellipse([cx + 12, cy - 4, cx + 22, cy + 12], fill=(30, 30, 40, 255))
+    # Feet
+    d.polygon([(cx - 8, cy + 20), (cx - 14, cy + 28), (cx - 2, cy + 24)],
+              fill=(240, 150, 40, 255))
+    d.polygon([(cx + 8, cy + 20), (cx + 14, cy + 28), (cx + 2, cy + 24)],
+              fill=(240, 150, 40, 255))
+    return im.resize((w, h), resample=_RESAMPLE)
+
+
+def _render_heron(size: int, frame: int, progress: float):
+    from PIL import Image as _Im
+    im, d, cx, cy, w, h = _bird_canvas(size, 1.2)
+    # Tall gray body + long neck
+    d.ellipse([cx - 10, cy + 2, cx + 14, cy + 24], fill=(140, 150, 165, 255))
+    d.ellipse([cx - 6, cy + 6, cx + 10, cy + 20], fill=(190, 200, 215, 255))
+    d.ellipse([cx + 6, cy - 10, cx + 18, cy + 10], fill=(160, 170, 185, 255))
+    d.ellipse([cx + 2, cy - 24, cx + 16, cy - 8], fill=(180, 190, 205, 255))
+    d.ellipse([cx + 12, cy - 30, cx + 26, cy - 16], fill=(200, 210, 220, 255))
+    # Long dagger beak
+    d.polygon([(cx + 24, cy - 24), (cx + 48, cy - 22), (cx + 24, cy - 18)],
+              fill=(240, 180, 60, 255))
+    d.ellipse([cx + 16, cy - 26, cx + 20, cy - 22], fill=(20, 20, 25, 255))
+    # Crest plume
+    d.line([(cx + 14, cy - 28), (cx + 8, cy - 40)], fill=(220, 225, 235, 255), width=2)
+    # One long leg in water
+    leg = cx + (2 if frame % 2 == 0 else -2)
+    d.line([(leg, cy + 22), (leg + 1, cy + 48)], fill=(200, 160, 80, 255), width=2)
+    d.ellipse([cx - 8, cy + 44, cx + 16, cy + 52], fill=(100, 170, 220, 90))
+    return im.resize((w, h), resample=_RESAMPLE)
+
+
+def _render_toucan(size: int, frame: int, progress: float):
+    from PIL import Image as _Im
+    im, d, cx, cy, w, h = _bird_canvas(size, 1.55)
+    hop = 3 if frame % 2 else 0
+    cy -= hop
+    # Black body, yellow bib
+    d.ellipse([cx - 18, cy - 8, cx + 12, cy + 16], fill=(25, 25, 30, 255))
+    d.ellipse([cx - 8, cy, cx + 10, cy + 14], fill=(250, 210, 50, 255))
+    d.ellipse([cx + 2, cy - 12, cx + 20, cy + 2], fill=(30, 30, 35, 255))
+    # Huge colorful bill
+    d.polygon([(cx + 16, cy - 10), (cx + 52, cy - 14), (cx + 50, cy + 2),
+               (cx + 16, cy + 4)], fill=(240, 70, 50, 255))
+    d.polygon([(cx + 20, cy - 6), (cx + 48, cy - 8), (cx + 46, cy),
+               (cx + 20, cy + 2)], fill=(250, 200, 40, 255))
+    d.ellipse([cx + 8, cy - 10, cx + 13, cy - 5], fill=(20, 200, 80, 255))
+    # Blue feet hint / tail
+    d.polygon([(cx - 16, cy + 6), (cx - 32, cy + 4), (cx - 18, cy + 14)],
+              fill=(40, 40, 50, 255))
+    d.line([(cx - 2, cy + 14), (cx - 2, cy + 24)], fill=(40, 100, 200, 255), width=2)
+    return im.resize((w, h), resample=_RESAMPLE)
+
+
+def _render_woodpecker(size: int, frame: int, progress: float):
+    from PIL import Image as _Im
+    im, d, cx, cy, w, h = _bird_canvas(size, 1.25)
+    # Vertical cling pose; peck animation
+    peck = 4 if frame % 2 == 0 else 0
+    d.ellipse([cx - 10, cy - 16, cx + 12, cy + 18], fill=(40, 40, 50, 255))
+    d.ellipse([cx - 6, cy - 8, cx + 10, cy + 14], fill=(245, 245, 250, 255))
+    # Red crown
+    d.ellipse([cx - 4, cy - 22, cx + 12, cy - 8], fill=(220, 40, 50, 255))
+    d.ellipse([cx + 2 + peck, cy - 14, cx + 16 + peck, cy - 2],
+              fill=(50, 50, 60, 255))
+    d.polygon([(cx + 14 + peck, cy - 8), (cx + 28 + peck, cy - 6),
+               (cx + 14 + peck, cy - 4)], fill=(35, 35, 40, 255))
+    d.ellipse([cx + 6 + peck, cy - 12, cx + 10 + peck, cy - 8],
+              fill=(15, 15, 20, 255))
+    # Black wing bars
+    d.ellipse([cx - 12, cy - 4, cx + 2, cy + 12], fill=(30, 30, 40, 255))
+    d.line([(cx - 8, cy), (cx - 2, cy + 4)], fill=(245, 245, 250, 255), width=2)
+    d.line([(cx - 8, cy + 6), (cx - 2, cy + 10)], fill=(245, 245, 250, 255), width=2)
+    # Tree trunk hint
+    d.rectangle([cx + 26, 0, cx + 34, h * 3], fill=(90, 55, 30, 120))
+    return im.resize((w, h), resample=_RESAMPLE)
+
+
+def _render_goose(size: int, frame: int, progress: float):
+    from PIL import Image as _Im
+    im, d, cx, cy, w, h = _bird_canvas(size, 1.75)
+    flap = 0.7 if frame % 2 == 0 else -0.5
+    _draw_soaring_wings(d, cx, cy, flap, (
+        (80, 90, 100), (140, 150, 160), (200, 205, 215),
+    ), spread_base=15)
+    # Canada goose-ish: brown body, black neck, white cheek
+    d.ellipse([cx - 22, cy - 4, cx + 16, cy + 16], fill=(120, 90, 55, 255))
+    d.ellipse([cx - 14, cy, cx + 12, cy + 12], fill=(160, 125, 80, 255))
+    d.ellipse([cx + 8, cy - 16, cx + 22, cy + 4], fill=(25, 25, 30, 255))
+    d.ellipse([cx + 12, cy - 22, cx + 28, cy - 8], fill=(20, 20, 25, 255))
+    d.ellipse([cx + 18, cy - 18, cx + 26, cy - 10], fill=(245, 245, 250, 255))
+    d.polygon([(cx + 26, cy - 14), (cx + 40, cy - 12), (cx + 26, cy - 10)],
+              fill=(35, 35, 40, 255))
+    d.ellipse([cx + 16, cy - 16, cx + 20, cy - 12], fill=(15, 15, 20, 255))
+    d.polygon([(cx - 20, cy + 4), (cx - 36, cy + 2), (cx - 22, cy + 12)],
+              fill=(100, 75, 45, 255))
+    return im.resize((w, h), resample=_RESAMPLE)
+
+
 _FLYER_RENDERERS = {
     "hawk": _render_hawk,
     "eagle": _render_eagle,
@@ -605,6 +782,14 @@ _FLYER_RENDERERS = {
     "robin": _render_robin,
     "macaw": _render_macaw,
     "pelican": _render_pelican,
+    "swan": _render_swan,
+    "crow": _render_crow,
+    "seagull": _render_seagull,
+    "penguin": _render_penguin,
+    "heron": _render_heron,
+    "toucan": _render_toucan,
+    "woodpecker": _render_woodpecker,
+    "goose": _render_goose,
 }
 
 
@@ -641,7 +826,9 @@ def flyer_size(flyer_id: str, scale: int = 2) -> Tuple[int, int]:
     aspects = {
         "hawk": 1.75, "eagle": 1.9, "cardinal": 1.35, "bluejay": 1.45,
         "owl": 1.25, "hummingbird": 1.7, "flamingo": 1.15, "robin": 1.35,
-        "macaw": 1.4, "pelican": 1.85,
+        "macaw": 1.4, "pelican": 1.85, "swan": 1.7, "crow": 1.55,
+        "seagull": 1.85, "penguin": 1.05, "heron": 1.2, "toucan": 1.55,
+        "woodpecker": 1.25, "goose": 1.75,
     }
     w = int(round(h * aspects.get(flyer_id, 1.4)))
     return w, h
@@ -715,15 +902,16 @@ def apply_flyer(img, t: float, interval: float = 10.0,
         sprite = sprite.transpose(_FLIP_LR)
 
     bob = int(round(math.sin(progress * math.pi * 3) * (1 + fh // 10)))
-    if flyer_id in ("hawk", "eagle", "pelican"):
+    if flyer_id in ("hawk", "eagle", "pelican", "seagull", "crow", "goose"):
         bob = int(round(math.sin(progress * math.pi * 5) * (1 + fh // 12)))
     elif flyer_id == "hummingbird":
         bob = int(round(math.sin(progress * math.pi * 9) * (2 + fh // 10)))
-    elif flyer_id in ("cardinal", "bluejay", "robin", "macaw"):
+    elif flyer_id in ("cardinal", "bluejay", "robin", "macaw", "toucan",
+                      "woodpecker"):
         bob = int(round(abs(math.sin(progress * math.pi * 7)) * (fh // 12)))
-    elif flyer_id == "owl":
+    elif flyer_id in ("owl", "penguin"):
         bob = int(round(math.sin(progress * math.pi * 2) * (fh // 14)))
-    elif flyer_id == "flamingo":
+    elif flyer_id in ("flamingo", "heron", "swan"):
         bob = int(round(math.sin(progress * math.pi * 2.5) * (fh // 12)))
     y = max(0, min(h - fh, (h - fh) // 2 + bob))
 

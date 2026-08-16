@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Soft-shaded realistic bird flyovers (hawk, cardinal, eagle, blue jay, owl, hummingbird, flamingo, robin, macaw, pelican). Handmade — not licensed characters.",
+      "description": "Soft-shaded realistic bird flyovers (hawk, swan, cardinal, crow, eagle, seagull, blue jay, penguin, owl, heron, hummingbird, toucan, flamingo, woodpecker, robin, goose, macaw, pelican). Handmade — not licensed characters.",
       "properties": {
         "enabled": {
           "type": "boolean",

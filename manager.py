@@ -1080,7 +1080,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             self._fun_art_logged = True
             self.logger.info(
                 "Fun art: soft-shaded bird flyovers with depth "
-                "(hawk, eagle, cardinal, bluejay, …)"
+                "(hawk, swan, eagle, penguin, toucan, …)"
             )
         span = self.strip.scroll_span(built)
 
