@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.65.9",
+  "version": "0.65.10",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.65.10",
+      "released": "2026-08-16",
+      "notes": "Restore bumper helpers accidentally dropped in 0.65.9 soft-flyer rewrite (pick_sprites/motion/wreckage)."
+    },
     {
       "version": "0.65.9",
       "released": "2026-08-16",
