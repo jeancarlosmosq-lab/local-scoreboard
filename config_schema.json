@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Soft-shaded realistic flyovers (soccer ball, hawk, baseball, dolphin, cardinal, fox) painted large then downscaled for the LED. No licensed characters.",
+      "description": "Soft-shaded realistic bird flyovers (hawk, cardinal, eagle, blue jay, owl, hummingbird, flamingo, robin, macaw, pelican). Handmade — not licensed characters.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -78,8 +78,8 @@
         },
         "flyers": {
           "type": "boolean",
-          "title": "Soft-Shaded Flyovers",
-          "description": "Every so often a soft-shaded soccer ball, hawk, baseball, dolphin, cardinal, or fox crosses with depth. On by default.",
+          "title": "Bird Flyovers",
+          "description": "Every so often a soft-shaded bird crosses with depth. On by default.",
           "default": true
         },
         "flyer_interval": {
