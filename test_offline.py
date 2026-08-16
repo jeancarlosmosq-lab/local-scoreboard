@@ -4723,14 +4723,15 @@ def main():
     assert set(_kid_art.FLYER_ORDER) <= set(_kid_art.FLYERS)
     # Flyer crosses with depth (small→big→small), then clears.
     fimg = Image.new("RGB", (192, 32), (10, 10, 10))
-    assert _kid_art.apply_flyer(fimg, 1.0, interval=10, flight=2.8) == "bee"
+    assert _kid_art.apply_flyer(fimg, 1.0, interval=10, flight=2.8) == "plumber"
     lit = sum(1 for y in range(32) for x in range(192)
               if fimg.getpixel((x, y)) != (10, 10, 10))
     assert lit > 10, lit
     idle = Image.new("RGB", (192, 32), (10, 10, 10))
     assert _kid_art.apply_flyer(idle, 6.0, interval=10, flight=2.8) is None
     assert "face" not in _kid_art.FLYERS and "face" not in _kid_art.FLYER_ORDER
-    assert "plumber" in _kid_art.FLYERS and _kid_art.FLYER_ORDER[2] == "plumber"
+    assert _kid_art.FLYER_ORDER == ("plumber",)
+    assert set(_kid_art.FLYERS) == {"plumber"}
     seen = set()
     for i in range(len(_kid_art.FLYER_ORDER)):
         stamp = Image.new("RGB", (192, 32), (0, 0, 0))
@@ -4744,8 +4745,8 @@ def main():
     # Depth: mid-flight (closest) covers more pixels than near the edge.
     edge = Image.new("RGB", (192, 32), (0, 0, 0))
     mid = Image.new("RGB", (192, 32), (0, 0, 0))
-    assert _kid_art.apply_flyer(edge, 0.2, interval=10, flight=2.8) == "bee"
-    assert _kid_art.apply_flyer(mid, 1.4, interval=10, flight=2.8) == "bee"
+    assert _kid_art.apply_flyer(edge, 0.2, interval=10, flight=2.8) == "plumber"
+    assert _kid_art.apply_flyer(mid, 1.4, interval=10, flight=2.8) == "plumber"
     lit_edge = sum(1 for y in range(32) for x in range(192)
                    if edge.getpixel((x, y)) != (0, 0, 0))
     lit_mid = sum(1 for y in range(32) for x in range(192)
