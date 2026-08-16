@@ -447,16 +447,15 @@ class BaseballLeadersManager:
 
         Never called from the render path -- this is a real HTTP request
         (the roster itself, then a stat-line request per stat group), on
-        the same cache_duration as the leaderboards. Marks itself fetched
-        before the network call so a failure does not retry on every
-        single update cycle until the interval passes again.
+        the same cache_duration as the leaderboards. The throttle stamp is
+        only written after a successful fetch: stamping before the network
+        call left a failed roster blank for the full cache_duration.
         """
         if self.data_source is None or not team_abbr:
             return
         now = time.time()
         if now - self._roster_fetched_at.get(team_abbr, 0.0) < self.cache_duration:
             return
-        self._roster_fetched_at[team_abbr] = now
 
         try:
             roster = self.data_source.fetch_team_roster(team_abbr)
@@ -464,6 +463,8 @@ class BaseballLeadersManager:
             self.logger.debug(f"Roster fetch failed for {team_abbr}: {e}")
             return
         if not roster:
+            # Empty is a real answer (unknown abbr, off-season) -- throttle.
+            self._roster_fetched_at[team_abbr] = now
             return
 
         player_ids = [p["player_id"] for p in roster]
@@ -480,6 +481,7 @@ class BaseballLeadersManager:
         self._roster_pitching[team_abbr] = pitching
         self._roster_names[team_abbr] = names
         self._roster_full_names[team_abbr] = full_names
+        self._roster_fetched_at[team_abbr] = now
         self.logger.info(
             f"Refreshed {team_abbr} roster: {len(roster)} players, "
             f"{len(hitting)} with hitting stats, {len(pitching)} with "

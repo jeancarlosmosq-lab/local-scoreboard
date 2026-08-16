@@ -7,14 +7,14 @@ moon, so this is exact arithmetic rather than a fetch.
 """
 
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 
 SYNODIC_MONTH = 29.530588853  # days from one new moon to the next
 
 # A well-documented reference new moon (2000-01-06 18:14 UTC) -- any real
 # new moon works equally well as the zero point, since only elapsed time
 # modulo the synodic month matters.
-_REFERENCE_NEW_MOON = datetime(2000, 1, 6, 18, 14)
+_REFERENCE_NEW_MOON = datetime(2000, 1, 6, 18, 14, tzinfo=timezone.utc)
 
 # Upper bound of each phase's slice of the 0..1 cycle (0/1 = new moon,
 # 0.5 = full), each named phase given roughly its own eighth, with New
@@ -39,9 +39,17 @@ def phase_info(when: datetime) -> dict:
     Returns {"name", "fraction", "illumination", "waxing"}: fraction is
     0..1 through the cycle, illumination is 0..100 (percent of the disc
     lit), waxing is True while the lit fraction is still growing.
+
+    Aware datetimes are converted to UTC before comparing to the UTC
+    reference -- stripping tzinfo alone (local wall time treated as UTC)
+    skewed the phase near New/Full on non-UTC clocks.
     """
-    naive = when.replace(tzinfo=None) if when.tzinfo else when
-    days = (naive - _REFERENCE_NEW_MOON).total_seconds() / 86400.0
+    if when.tzinfo is not None:
+        instant = when.astimezone(timezone.utc)
+    else:
+        # Naive inputs are treated as UTC, matching the reference epoch.
+        instant = when.replace(tzinfo=timezone.utc)
+    days = (instant - _REFERENCE_NEW_MOON).total_seconds() / 86400.0
     fraction = (days % SYNODIC_MONTH) / SYNODIC_MONTH
     illumination = round((1 - math.cos(2 * math.pi * fraction)) * 50)
     name = next(label for upper, label in _PHASE_BOUNDS if fraction < upper)

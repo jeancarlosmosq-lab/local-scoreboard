@@ -484,6 +484,62 @@ def main():
     print("PASS  broadcast parsing keeps only the most common local "
           "channel, not every regional feed on the game")
 
+    # Market-only entries (no names[]) used to paint "home"/"away" as if
+    # they were networks -- skip those, and reject those strings even if
+    # they somehow appear in names[].
+    market_only = {"broadcasts": [
+        {"market": "home"},
+        {"market": "national", "names": ["ESPN"]},
+    ]}
+    assert src._parse_broadcast(market_only) == "ESPN", (
+        f"market-only entries must not become channel names: "
+        f"{src._parse_broadcast(market_only)!r}"
+    )
+    garbage_names = {"broadcasts": [
+        {"market": "home", "names": ["home"]},
+        {"market": "national", "names": ["FOX"]},
+    ]}
+    assert src._parse_broadcast(garbage_names) == "FOX", (
+        f"literal 'home'/'away' names must be filtered: "
+        f"{src._parse_broadcast(garbage_names)!r}"
+    )
+    print("PASS  broadcast parsing ignores market-only / home-away garbage")
+
+    # Football possession: ESPN sometimes points situation.possession at
+    # team.id rather than competitor.id -- match either.
+    nfl_sit_team_id = ESPNGamesSource._parse_situation({
+        "situation": {
+            "possession": "6",
+            "shortDownDistanceText": "1st & 10",
+            "possessionText": "DAL 40",
+            "isRedZone": False,
+        },
+        "status": {"displayClock": "5:00"},
+        "competitors": [
+            {"id": "1", "team": {"id": "6", "abbreviation": "DAL"}},
+            {"id": "2", "team": {"id": "26", "abbreviation": "SEA"}},
+        ],
+    }, "nfl")
+    assert nfl_sit_team_id.get("possession") == "DAL", (
+        f"possession must resolve via team.id when competitor.id differs: "
+        f"{nfl_sit_team_id}"
+    )
+    mlb_sit_bad = ESPNGamesSource._parse_situation({
+        "situation": {"balls": "x", "strikes": None, "outs": "2",
+                      "onFirst": True},
+    }, "mlb")
+    assert mlb_sit_bad["balls"] == 0 and mlb_sit_bad["strikes"] == 0
+    assert mlb_sit_bad["outs"] == 2 and mlb_sit_bad["first"] is True
+    print("PASS  NFL possession matches team.id; baseball counts tolerate junk")
+
+    import inspect as _inspect_espn
+    _sb_sig = _inspect_espn.signature(ESPNGamesSource.fetch_scoreboard)
+    assert _sb_sig.parameters["days_back"].default == 3, (
+        f"fetch_scoreboard days_back default should be 3 (history window), "
+        f"got {_sb_sig.parameters['days_back'].default}"
+    )
+    print("PASS  scoreboard history window defaults to 3 days")
+
     # ---- 4. Team Filtering And Cadence ----------------------------------
     gm = GamesManager(log, cache_manager=FakeCache())
 
@@ -3209,6 +3265,14 @@ def main():
         f"the reference new moon itself should read ~0% illuminated: "
         f"{ref_info}"
     )
+    # Aware local wall times must convert to UTC, not strip tzinfo.
+    from datetime import timezone as _tz
+    aware_ref = _dt(2000, 1, 6, 13, 14, tzinfo=_tz(_moon_td(hours=-5)))
+    aware_info = moon_phase.phase_info(aware_ref)
+    assert abs(aware_info["fraction"] - ref_info["fraction"]) < 1e-9, (
+        f"EST 13:14 on the reference day must match UTC 18:14: "
+        f"{aware_info} vs {ref_info}"
+    )
     print(f"PASS  moon phase arithmetic stays in range and cycles through "
           f"all eight named phases: {sorted(seen_names)}")
 
@@ -4737,7 +4801,7 @@ def main():
     print("PASS  rivalry_live_boost widens the strip for live rivalry games")
 
     # NFL live strip + static panel regression goldens (ink / width checks).
-    golden_dir = os.path.join(tempfile.gettempdir(), "local_scoreboard_golden")
+    golden_dir = os.path.join(os.path.dirname(__file__), "test", "golden")
     os.makedirs(golden_dir, exist_ok=True)
     nfl_live = {
         "id": "dal-sea", "league": "nfl", "state": STATE_LIVE, "period": 2,
@@ -4770,6 +4834,20 @@ def main():
     assert panel is not None
     panel.save(os.path.join(golden_dir, "nfl_static_panel_64x32.png"))
     print(f"PASS  NFL live strip/panel regression goldens written to {golden_dir}")
+
+    # Roster refresh must not stamp the throttle on a failed network call,
+    # or a transient blip blanks the roster for the full cache_duration.
+    from leaders_manager import BaseballLeadersManager as _LM
+    lm_roster = _LM(log, cache_duration=3600)
+    class _BoomRoster:
+        def fetch_team_roster(self, abbr):
+            raise RuntimeError("network down")
+    lm_roster.data_source = _BoomRoster()
+    lm_roster.refresh_team_roster("NYY")
+    assert "NYY" not in lm_roster._roster_fetched_at, (
+        "failed roster fetch must not stamp _roster_fetched_at"
+    )
+    print("PASS  roster refresh does not throttle after a failed fetch")
 
     # Soccer scorers from summary keyEvents.
     soccer_summary = {

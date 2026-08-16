@@ -250,12 +250,15 @@ class ESPNGamesSource:
         }
 
     # ------------------------------------------------------------------
-    def fetch_scoreboard(self, league: str, days_back: int = 1,
+    def fetch_scoreboard(self, league: str, days_back: int = 3,
                          days_forward: int = 7) -> Optional[List[Dict]]:
         """Fetch a league's games across a date window.
 
-        A window rather than a single day: "recent" needs yesterday's finals
-        and "upcoming" needs the next week, and one request covers both.
+        A window rather than a single day: "recent" needs a few days of
+        finals (notable performers and headline ranking still consult
+        them) and "upcoming" needs the next week, and one request covers
+        both. Default history is 3 days -- confirmed in 0.21.0 notes;
+        a 1-day window aged finals out before their own recap was useful.
 
         Returns an empty list when the request succeeded but there are no
         games in the window. Returns None when the request itself failed --
@@ -519,6 +522,11 @@ class ESPNGamesSource:
             name = ascii_fold(str(value)).strip()
             if not name:
                 return
+            # Entries with a market but no channel name used to fall through
+            # to add(entry["market"]), which painted "home"/"away"/"national"
+            # on the strip as if they were networks.
+            if name.lower() in ("home", "away", "national", "local"):
+                return
             if market in ("home", "away"):
                 if local is None:
                     local = name
@@ -536,8 +544,7 @@ class ESPNGamesSource:
                     for name in names:
                         if name:
                             add(name, market)
-                elif entry.get("market"):
-                    add(entry["market"], market)
+                # No names[] -- skip. Do not use market as the channel.
 
         if local is None and national is None:
             single = comp.get("broadcast")
@@ -580,11 +587,17 @@ class ESPNGamesSource:
                     athlete.get("shortName") or athlete.get("displayName") or ""
                 )
 
+            def count(key):
+                try:
+                    return int(situation.get(key) or 0)
+                except (TypeError, ValueError):
+                    return 0
+
             return {
                 "kind": "baseball",
-                "balls": int(situation.get("balls") or 0),
-                "strikes": int(situation.get("strikes") or 0),
-                "outs": int(situation.get("outs") or 0),
+                "balls": count("balls"),
+                "strikes": count("strikes"),
+                "outs": count("outs"),
                 "first": bool(situation.get("onFirst")),
                 "second": bool(situation.get("onSecond")),
                 "third": bool(situation.get("onThird")),
@@ -596,7 +609,14 @@ class ESPNGamesSource:
             possession_id = str(situation.get("possession") or "")
             possession_abbr = ""
             for competitor in comp.get("competitors", []) or []:
-                if str(competitor.get("id") or "") == possession_id:
+                # ESPN has used both competitor.id and team.id for the
+                # possession pointer across sports/seasons; match either so
+                # the "*" marker does not silently vanish.
+                cand = {
+                    str(competitor.get("id") or ""),
+                    str((competitor.get("team") or {}).get("id") or ""),
+                }
+                if possession_id and possession_id in cand:
                     possession_abbr = ascii_fold(
                         (competitor.get("team") or {}).get("abbreviation", "")
                     )

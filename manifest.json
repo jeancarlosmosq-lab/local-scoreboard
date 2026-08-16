@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.58.0",
+  "version": "0.58.1",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.58.1",
+      "released": "2026-08-16",
+      "notes": "Reliability polish: scoreboard history window defaults to 3 days (matches 0.21.0 intent); NFL possession matches competitor.team.id as well as competitor.id; broadcast parser skips market-only entries that painted home/away as channels; roster throttle stamps only after a successful fetch; moon phase converts aware datetimes to UTC instead of stripping tzinfo; NFL strip/panel goldens committed under test/golden/."
+    },
     {
       "version": "0.58.0",
       "released": "2026-08-16",
