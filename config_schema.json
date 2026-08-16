@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Small original pixel characters that scroll by every so often and look like they are smashing the board (cracks, flying debris, sparks). On automatically when Kid-Friendly Mode is on; turn off here if you want kid tips without the art. These are handmade sprites — not Mario, Pokemon, or other licensed mascots.",
+      "description": "Simple kid gag: a bee or UFO flies across the whole screen every so often. On automatically with Kid-Friendly Mode. Handmade sprites — not licensed characters.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -76,19 +76,33 @@
           "description": "Leave unset to follow Kid-Friendly Mode. Set true/false to force on or off.",
           "default": true
         },
+        "flyers": {
+          "type": "boolean",
+          "title": "Bee / UFO Flyovers",
+          "description": "Every so often a bee or UFO zips across the full panel. On by default — the simple kid gag.",
+          "default": true
+        },
+        "flyer_interval": {
+          "type": "number",
+          "title": "Seconds Between Flyovers",
+          "description": "How often a bee or UFO appears (then it takes a couple of seconds to cross).",
+          "default": 10,
+          "minimum": 4,
+          "maximum": 60
+        },
         "count": {
           "type": "integer",
-          "title": "Bumpers Per Lap",
-          "description": "How many different characters to rotate (1–8). A wrecking bumper is placed right after the clock and again after every followed team, so they keep showing up on a long scroll.",
-          "default": 4,
+          "title": "Extra Strip Bumpers",
+          "description": "Optional wrecking characters baked into the scroll (0 = off, recommended). The bee/UFO flyover is usually enough.",
+          "default": 0,
           "minimum": 0,
           "maximum": 8
         },
         "screen_chaos": {
           "type": "boolean",
           "title": "Cracked Window Overlay",
-          "description": "The whole panel looks like a smashed window — spiderweb glass cracks from an impact, then a second hit, with silly joke banners. On by default with fun art; turn off if it is too distracting.",
-          "default": true
+          "description": "Optional smashed-glass overlay across the whole panel. Off by default — turn on only if you want the busier effect.",
+          "default": false
         }
       }
     },

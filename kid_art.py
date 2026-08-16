@@ -235,6 +235,42 @@ SPRITE_ORDER: Tuple[str, ...] = (
     "rocket", "dino", "bot", "kitty", "star", "ball", "comet", "fish",
 )
 
+# Bee / UFO that fly across the full panel -- the simple kid gag.
+# Two wing / light frames each so they animate while crossing.
+FLYERS: Dict[str, Tuple[Grid, ...]] = {
+    "bee": (
+        (
+            (_, Y, Y, _, _, _),
+            (Y, K, Y, K, _, _),
+            (_, Y, Y, Y, Y, _),
+            (W, _, Y, Y, _, W),
+            (_, _, N, N, _, _),
+        ),
+        (
+            (_, Y, Y, _, _, _),
+            (Y, K, Y, K, _, _),
+            (_, Y, Y, Y, Y, _),
+            (_, W, Y, Y, W, _),
+            (_, _, N, N, _, _),
+        ),
+    ),
+    "ufo": (
+        (
+            (_, _, C, C, _, _),
+            (_, C, W, W, C, _),
+            (G, G, G, G, G, G),
+            (_, Y, _, Y, _, Y),
+        ),
+        (
+            (_, _, C, C, _, _),
+            (_, C, W, W, C, _),
+            (G, G, G, G, G, G),
+            (Y, _, Y, _, Y, _),
+        ),
+    ),
+}
+FLYER_ORDER: Tuple[str, ...] = ("bee", "ufo")
+
 # Pixels of horizontal / vertical room reserved around each sprite so a
 # bounce, wiggle, and flying wreckage never clips into neighbouring content.
 MOTION_PAD_X = 4
@@ -455,6 +491,87 @@ def draw_wreckage(draw, box_x: int, box_w: int, height: int,
             for px, py in ((cx + d, cy), (cx - d, cy), (cx, cy + d), (cx, cy - d)):
                 if box_x <= px < box_x + box_w and 0 <= py < height:
                     draw.point((px, py), fill=_FLASH)
+
+
+def blit_flyer(draw, x: int, y: int, flyer_id: str, scale: int = 2,
+               frame: int = 0) -> Tuple[int, int]:
+    """Paint a bee/UFO flyer; returns (width, height)."""
+    frames = FLYERS.get(flyer_id)
+    if not frames:
+        return 0, 0
+    rows = frames[int(frame) % len(frames)]
+    scale = max(1, int(scale))
+    h = len(rows)
+    w = max((len(row) for row in rows), default=0)
+    for row_i, row in enumerate(rows):
+        for col_i, colour in enumerate(row):
+            if colour is None:
+                continue
+            px = x + col_i * scale
+            py = y + row_i * scale
+            draw.rectangle(
+                [px, py, px + scale - 1, py + scale - 1], fill=colour)
+    return w * scale, h * scale
+
+
+def flyer_size(flyer_id: str, scale: int = 2) -> Tuple[int, int]:
+    frames = FLYERS.get(flyer_id)
+    if not frames:
+        return 0, 0
+    rows = frames[0]
+    scale = max(1, int(scale))
+    return (
+        max((len(r) for r in rows), default=0) * scale,
+        len(rows) * scale,
+    )
+
+
+def apply_flyer(img, t: float, interval: float = 10.0,
+                flight: float = 2.8) -> Optional[str]:
+    """Fly a bee or UFO across the full panel every so often.
+
+    Simple kid gag: every ``interval`` seconds, something zips left→right
+    (or right→left) over ~``flight`` seconds, then the screen is clear
+    again. Alternates bee / UFO. Returns the flyer id while crossing,
+    or None while idle.
+    """
+    try:
+        from PIL import ImageDraw as _ID
+    except ImportError:  # pragma: no cover
+        return None
+
+    w, h = img.size
+    if w < 16 or h < 8 or interval <= 0 or flight <= 0:
+        return None
+
+    cycle_i = int(t // interval)
+    local = t - cycle_i * interval
+    if local > flight:
+        return None
+
+    flyer_id = FLYER_ORDER[cycle_i % len(FLYER_ORDER)]
+    scale = 3 if h >= 28 else 2
+    fw, fh = flyer_size(flyer_id, scale=scale)
+    if fw <= 0:
+        return None
+
+    progress = local / flight  # 0..1
+    # Alternate direction each appearance.
+    going_right = (cycle_i % 2 == 0)
+    travel = w + fw + 4
+    if going_right:
+        x = int(-fw + progress * travel)
+    else:
+        x = int(w - progress * travel)
+
+    # Gentle bob so it doesn't slide on a dead-straight rail.
+    bob = int(round(math.sin(progress * math.pi * 4) * 2))
+    y = max(1, (h - fh) // 2 + bob)
+    frame = int(local * 10) % 2
+
+    draw = _ID.Draw(img)
+    blit_flyer(draw, x, y, flyer_id, scale=scale, frame=frame)
+    return flyer_id
 
 
 def blit(draw, x: int, y: int, sprite_id: str, scale: int = 2,

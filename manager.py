@@ -1074,13 +1074,13 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         )
         if built is None:
             return False
-        regions = getattr(self.strip, "_fun_art_regions", None) or []
-        if regions and not getattr(self, "_fun_art_logged", False):
+        if (self.teams_kid_friendly
+                and not getattr(self, "_fun_art_logged", False)
+                and getattr(self.strip, "_flyers_enabled", lambda: False)()):
             self._fun_art_logged = True
             self.logger.info(
-                "Fun art wrecking bumpers on strip (%d): %s",
-                len(regions),
-                ", ".join(r[0] for r in regions),
+                "Fun art: bee/UFO flyovers across the panel "
+                "(simple kid gag; cracked-window off unless enabled)"
             )
         span = self.strip.scroll_span(built)
 

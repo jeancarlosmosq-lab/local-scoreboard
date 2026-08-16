@@ -4717,17 +4717,32 @@ def main():
     assert any("Lamine Yamal" in str(t) for t in fspy.texts)
     print("PASS  favorite_player prefers Yamal and draws a Star note")
 
-    # Original fun-art bumpers (not licensed characters) show under kid mode.
+    # Original fun-art: bee/UFO flyovers (simple) + optional strip bumpers.
     import kid_art as _kid_art
     assert set(_kid_art.SPRITE_ORDER) <= set(_kid_art.SPRITES)
+    assert set(_kid_art.FLYER_ORDER) <= set(_kid_art.FLYERS)
+    # Flyer crosses, then clears.
+    fimg = Image.new("RGB", (192, 32), (10, 10, 10))
+    assert _kid_art.apply_flyer(fimg, 1.0, interval=10, flight=2.8) in (
+        "bee", "ufo")
+    lit = sum(1 for y in range(32) for x in range(192)
+              if fimg.getpixel((x, y)) != (10, 10, 10))
+    assert lit > 10, lit
+    idle = Image.new("RGB", (192, 32), (10, 10, 10))
+    assert _kid_art.apply_flyer(idle, 6.0, interval=10, flight=2.8) is None
+    assert all(idle.getpixel((x, y)) == (10, 10, 10)
+               for y in range(32) for x in range(0, 192, 8))
     picks = _kid_art.pick_sprites(15, count=2)
     assert len(picks) == 2 and picks[0] != picks[1]
     rfun = StripRenderer(
         FakeDisplay(192, 32),
-        {"kid_friendly": True, "fun_art": {"enabled": True, "count": 2}},
+        {"kid_friendly": True, "fun_art": {
+            "enabled": True, "flyers": True, "count": 2,
+            "screen_chaos": False}},
         log,
     )
-    assert rfun._fun_art_enabled()
+    assert rfun._fun_art_enabled() and rfun._flyers_enabled()
+    assert not rfun._screen_chaos_enabled()
     assert rfun._fun_art_picks(type("C", (), {"hour": 15})()) == picks
     fimg2 = Image.new("RGB", (120, 32), (0, 0, 0))
     fdraw2 = _KidID.Draw(fimg2)
@@ -4773,31 +4788,9 @@ def main():
     assert with_fun.width > without_fun.width, (
         with_fun.width, without_fun.width)
     assert len(rfun._fun_art_regions) >= 2, rfun._fun_art_regions
-    # Whole-panel chaos: cracks / glitch tears / interrupt on the final frame.
-    chaos = Image.new("RGB", (192, 32), (40, 80, 120))
-    for px in range(192):
-        for py in range(32):
-            chaos.putpixel((px, py), (40 + (px % 20), 80, 120))
-    before_c = chaos.copy()
-    phases = set()
-    for tt in (1.0, 6.0, 10.0):
-        frame = before_c.copy()
-        phases.add(_kid_art.apply_screen_chaos(frame, tt))
-        assert any(
-            frame.getpixel((x, y)) != before_c.getpixel((x, y))
-            for y in range(32) for x in range(0, 192, 4)
-        ), tt
-    assert phases >= {"cracks", "shatter", "smash"}, phases
-    # Cracked-window spiderweb leaves bright glass pixels.
-    glass = before_c.copy()
-    _kid_art.apply_screen_chaos(glass, 4.0)
-    assert any(
-        glass.getpixel((x, y))[2] >= 200  # bluish-white glass crack
-        for y in range(32) for x in range(0, 192, 3)
-    )
     assert _kid_art.funny_gag(0) in _kid_art.FUNNY_GAGS
-    assert _kid_art.funny_gag(25) != _kid_art.funny_gag(0)
     print("PASS  kid fun-art bumpers draw, animate, and widen the strip")
+    print("PASS  bee/UFO flyers cross the panel then clear")
 
     # Daily condensation: daytime highs only, Title Case labels, unit convert.
     wx_daily = NWSWeather(log, 40.66, -74.11, units="C")

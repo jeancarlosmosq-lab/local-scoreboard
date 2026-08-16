@@ -1866,9 +1866,11 @@ class StripRenderer:
         if not self._fun_art_enabled():
             return []
         cfg = self.config.get("fun_art") or {}
-        # Default 4 -- two tiny bumpers on a long family strip were easy
-        # to miss entirely between weather, six teams, and leaderboards.
-        count = max(0, min(8, int(cfg.get("count", 4))))
+        # Default 0: the simple gag is a bee/UFO flying across the panel.
+        # Strip bumpers are opt-in via fun_art.count.
+        count = max(0, min(8, int(cfg.get("count", 0))))
+        if count <= 0:
+            return []
         hour = clock.hour if clock is not None else 12
         return kid_art.pick_sprites(hour, count=count)
 
@@ -3121,10 +3123,16 @@ class StripRenderer:
                     fill=self.DIVIDER)
             img.paste(scrolled, (reserved, 0))
 
-            # Full-panel crack / glitch / interrupt overlay -- the gag is
-            # that the *display itself* is being wrecked, not just a
-            # bumper. Only when fun-art / kid mode asks for it.
-            if self._screen_chaos_enabled():
+            # Simple kid gag: every so often a bee or UFO flies across
+            # the whole panel. Cracked-window chaos is off unless opted in.
+            if self._flyers_enabled():
+                cfg = self.config.get("fun_art") or {}
+                kid_art.apply_flyer(
+                    img, time.time(),
+                    interval=float(cfg.get("flyer_interval", 10)),
+                    flight=float(cfg.get("flyer_flight", 2.8)),
+                )
+            elif self._screen_chaos_enabled():
                 kid_art.apply_screen_chaos(img, time.time())
 
             self.display_manager.image.paste(img, (0, 0))
@@ -3134,12 +3142,19 @@ class StripRenderer:
             self.logger.error("Error drawing strip: %s", e, exc_info=True)
             return False
 
-    def _screen_chaos_enabled(self) -> bool:
-        """Whole-panel crack/glitch overlay (kid fascination mode)."""
+    def _flyers_enabled(self) -> bool:
+        """Bee / UFO crossing the panel -- the default kid fun gag."""
         if not self._fun_art_enabled():
             return False
         cfg = self.config.get("fun_art") or {}
-        return bool(cfg.get("screen_chaos", True))
+        return bool(cfg.get("flyers", True))
+
+    def _screen_chaos_enabled(self) -> bool:
+        """Optional cracked-window overlay (off by default -- too busy)."""
+        if not self._fun_art_enabled():
+            return False
+        cfg = self.config.get("fun_art") or {}
+        return bool(cfg.get("screen_chaos", False))
 
     def draw_message(self, message: str) -> bool:
         try:
