@@ -1132,6 +1132,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         # Repaint just the clock box; recomposing the strip for a minute
         # change would cost hundreds of milliseconds.
         self.strip.refresh_clock(datetime.now())
+        self.strip.refresh_fun_art(time.time())
         return self.strip.draw_strip(built, self._scroll_offset)
 
     def _effective_scroll_speed(self, teams_and_games, panel_game=None) -> float:

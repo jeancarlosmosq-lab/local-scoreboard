@@ -112,7 +112,7 @@ def _compose_worker_main(conn, width: int, height: int,
         if request is None:
             return
         try:
-            strip, clock_state = renderer._compose_strip(*request)
+            strip, clock_state, fun_regions = renderer._compose_strip(*request)
             if clock_state is not None:
                 # The font object in the middle of clock_state can't
                 # safely cross a process boundary -- confirmed the hard
@@ -126,12 +126,12 @@ def _compose_worker_main(conn, width: int, height: int,
                 # both plain data, need to make the trip.
                 box, _font, clock_text = clock_state
                 clock_state = (box, None, clock_text)
-            conn.send(("ok", strip, clock_state))
+            conn.send(("ok", strip, clock_state, list(fun_regions or [])))
         except Exception as e:
             worker_logger.error(
                 "Background strip compose failed in worker process: %s",
                 e, exc_info=True)
-            conn.send(("error", str(e), None))
+            conn.send(("error", str(e), None, None))
 
 
 class StripRenderer:
@@ -298,6 +298,11 @@ class StripRenderer:
         self._clock_box = None
         self._clock_font = None
         self._clock_shown = None
+        # Fun-art bumper regions on the cached strip -- refreshed in place
+        # every frame (bob / bounce / frame swap), same idea as the clock.
+        self._fun_art_regions: List[Tuple] = []
+        self._pending_fun_art_regions: Optional[List[Tuple]] = None
+        self._fun_art_tick: float = -1.0
         # A fixed card occupying the left module, when one is wanted.
         self._static_panel = None
 
@@ -1866,12 +1871,13 @@ class StripRenderer:
         return kid_art.pick_sprites(hour, count=count)
 
     def _draw_fun_bumper(self, img, draw, x: int, sprite_id: str,
-                         font, row_h: int) -> int:
+                         font, row_h: int,
+                         regions: Optional[List] = None) -> int:
         """A small original pixel character + cheer word for kids.
 
         Handmade sprites (rocket, dino, bot, …) -- not licensed mascots.
-        Scale 2 keeps them readable on a 32-row panel without eating the
-        whole strip width.
+        Scale 2 keeps them readable on a 32-row panel. The sprite column
+        is recorded so refresh_fun_art can animate it every frame.
         """
         start = x
         label = kid_art.label_for(sprite_id) or "!"
@@ -1879,14 +1885,53 @@ class StripRenderer:
         sw, sh = kid_art.sprite_size(sprite_id, scale=scale)
         if sw <= 0:
             return 0
-        oy = max(self.MARGIN, (self.height - sh) // 2)
-        kid_art.blit(draw, x, oy, sprite_id, scale=scale)
-        tx = x + sw + 3
+        pad_x = kid_art.MOTION_PAD_X
+        pad_y = kid_art.MOTION_PAD_Y
+        # Inset the sprite so a wiggle/bounce stays inside this bumper's
+        # own width instead of painting over the previous divider.
+        sprite_x = x + pad_x
+        base_oy = max(self.MARGIN + pad_y,
+                      (self.height - sh) // 2)
+        kid_art.blit(draw, sprite_x, base_oy, sprite_id, scale=scale, frame=0)
+        box_w = sw + pad_x * 2
+        if regions is not None:
+            # (sprite_id, box_x, box_w, scale, base_oy) -- plain data so a
+            # worker process can ship it back with the strip image.
+            regions.append((sprite_id, x, box_w, scale, base_oy))
+        tx = x + box_w + 3
         start_row = self._vblock_start(row_h, 1)
         top = self._text_top(draw, font, start_row, sample=label)
         draw.text((tx, top), self._safe(label), font=font, fill=self.RIVALRY)
         tw = self._measure(draw, label, font)[0]
         return (tx + tw + 6) - start
+
+    def refresh_fun_art(self, now_ts: float) -> None:
+        """Repaint fun-art sprites in place so they bob / bounce / flicker.
+
+        Caps at ~20 FPS of sprite updates -- plenty for a 32px character,
+        and cheaper than redrawing on every matrix frame when the board
+        is running at 60–100 FPS for scroll smoothness.
+        """
+        if self._strip_cache is None or not self._fun_art_regions:
+            return
+        # ~20 Hz is enough; skip if we already painted this tick window.
+        tick = math.floor(now_ts * 20.0)
+        if tick == self._fun_art_tick:
+            return
+        self._fun_art_tick = tick
+        draw = ImageDraw.Draw(self._strip_cache)
+        for sprite_id, box_x, box_w, scale, base_oy in self._fun_art_regions:
+            draw.rectangle(
+                [box_x, 0, box_x + box_w - 1, self.height - 1],
+                fill=(0, 0, 0),
+            )
+            dx, dy, frame = kid_art.motion(sprite_id, now_ts)
+            # Keep the sprite inside its reserved box.
+            dx = max(-kid_art.MOTION_PAD_X, min(kid_art.MOTION_PAD_X, dx))
+            dy = max(-kid_art.MOTION_PAD_Y, min(kid_art.MOTION_PAD_Y, dy))
+            sx = box_x + kid_art.MOTION_PAD_X + dx
+            sy = base_oy + dy
+            kid_art.blit(draw, sx, sy, sprite_id, scale=scale, frame=frame)
 
     @staticmethod
     def _followed_side_won(game: Dict, focus_abbr: str) -> Optional[Dict]:
@@ -2205,7 +2250,7 @@ class StripRenderer:
         if self._strip_cache is None:
             # Nothing on screen yet, so nothing to keep showing while a
             # background build runs -- block once, here, at startup.
-            strip, clock_state = self._compose_strip(
+            strip, clock_state, fun_regions = self._compose_strip(
                 teams_and_games, start_labels, leaderboards, weather, clock,
                 awards, other_live, team_mvps, countdowns, streaks,
                 weather_show_forecast, show_clock, weather_show_current,
@@ -2216,6 +2261,8 @@ class StripRenderer:
             self._clock_box, self._clock_font, self._clock_shown = (
                 clock_state if clock_state else (None, None, None)
             )
+            self._fun_art_regions = list(fun_regions or [])
+            self._fun_art_tick = -1.0
             self._last_build = time.time()
             return strip
 
@@ -2312,7 +2359,7 @@ class StripRenderer:
         self._last_build = time.time()
         fun_sprites = list(fun_sprites or [])
 
-        def _finish(strip, clock_state) -> None:
+        def _finish(strip, clock_state, fun_regions=None) -> None:
             with self._build_lock:
                 self._pending_key = signature
                 self._pending = strip
@@ -2322,6 +2369,7 @@ class StripRenderer:
                 # repainting every frame) is the *previous* build until
                 # adopt_pending() swaps them together.
                 self._pending_clock_state = clock_state
+                self._pending_fun_art_regions = list(fun_regions or [])
                 if self._dispatched_signature == signature:
                     self._dispatched_signature = None
 
@@ -2361,26 +2409,29 @@ class StripRenderer:
                     _fail("worker process timed out")
                     return
                 try:
-                    status, payload, clock_state = conn.recv()
+                    response = conn.recv()
                 except Exception:
                     _fail("reading response from worker process", exc_info=True)
                     return
-                if status == "ok":
-                    if clock_state is not None:
-                        # The worker sent the box and clock text but not
-                        # the font object itself -- see its own comment
-                        # for why. Resolved fresh, in this process: same
-                        # panel height, same _largest_fit call, so
-                        # deterministically the same font file the worker
-                        # used, just loaded (and cached) here instead.
-                        box, _missing_font, clock_text = clock_state
-                        probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-                        local_font, _ = self._largest_fit(
-                            probe, 2, self.height - self.MARGIN * 2)
-                        clock_state = (box, local_font, clock_text)
-                    _finish(payload, clock_state)
-                else:
+                if not response or response[0] != "ok":
+                    payload = response[1] if response and len(response) > 1 else "?"
                     _fail(f"worker reported: {payload}")
+                    return
+                status, payload, clock_state = response[0], response[1], response[2]
+                fun_regions = response[3] if len(response) > 3 else []
+                if clock_state is not None:
+                    # The worker sent the box and clock text but not
+                    # the font object itself -- see its own comment
+                    # for why. Resolved fresh, in this process: same
+                    # panel height, same _largest_fit call, so
+                    # deterministically the same font file the worker
+                    # used, just loaded (and cached) here instead.
+                    box, _missing_font, clock_text = clock_state
+                    probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+                    local_font, _ = self._largest_fit(
+                        probe, 2, self.height - self.MARGIN * 2)
+                    clock_state = (box, local_font, clock_text)
+                _finish(payload, clock_state, fun_regions)
 
             thread = threading.Thread(target=_watch, daemon=True,
                                       name="strip-build-watch")
@@ -2390,7 +2441,7 @@ class StripRenderer:
 
         def _run() -> None:
             try:
-                strip, clock_state = self._compose_strip(
+                strip, clock_state, fun_regions = self._compose_strip(
                     teams_and_games, start_labels, leaderboards, weather,
                     clock, awards, other_live, team_mvps, countdowns, streaks,
                     weather_show_forecast, show_clock, weather_show_current,
@@ -2399,7 +2450,7 @@ class StripRenderer:
             except Exception:
                 _fail("thread", exc_info=True)
                 return
-            _finish(strip, clock_state)
+            _finish(strip, clock_state, fun_regions)
 
         thread = threading.Thread(target=_run, daemon=True,
                                   name="strip-build")
@@ -2435,14 +2486,14 @@ class StripRenderer:
         caller's own already-built data for this one signature, never
         self._strip_cache/_pending directly.
 
-        Returns (image, clock_state) -- clock_state is whatever _draw_clock
-        produced (or None), for the caller to apply to the live clock
-        attributes only once this composition is actually adopted, not
-        during composition itself.
+        Returns (image, clock_state, fun_regions) -- clock_state is whatever
+        _draw_clock produced (or None), and fun_regions are bumper boxes for
+        refresh_fun_art, both applied only once this composition is adopted.
         """
         if kid_friendly is not None:
             self.kid_friendly = bool(kid_friendly)
         fun_sprites = list(fun_sprites or [])
+        fun_regions: List[Tuple] = []
         start_labels = start_labels or {}
 
         # The strip is as wide as its content, and the content is only known
@@ -2504,7 +2555,8 @@ class StripRenderer:
         fun_queue = list(fun_sprites)
         if fun_queue:
             x += self._draw_fun_bumper(
-                scratch, draw, x, fun_queue.pop(0), font, row_h)
+                scratch, draw, x, fun_queue.pop(0), font, row_h,
+                regions=fun_regions)
             x += self._draw_divider(scratch, draw, x)
 
         # Other-live games are interleaved one at a time after each
@@ -2597,7 +2649,8 @@ class StripRenderer:
 
             if fun_queue and team_i + 1 == mid_fun_at:
                 x += self._draw_fun_bumper(
-                    scratch, draw, x, fun_queue.pop(0), font, row_h)
+                    scratch, draw, x, fun_queue.pop(0), font, row_h,
+                    regions=fun_regions)
                 x += self._draw_divider(scratch, draw, x)
 
         # Anything left over -- more live games elsewhere than followed
@@ -2615,7 +2668,8 @@ class StripRenderer:
 
         while fun_queue:
             x += self._draw_fun_bumper(
-                scratch, draw, x, fun_queue.pop(0), font, row_h)
+                scratch, draw, x, fun_queue.pop(0), font, row_h,
+                regions=fun_regions)
             x += self._draw_divider(scratch, draw, x)
 
         # League leaders after the teams, behind a section banner: the block
@@ -2663,7 +2717,11 @@ class StripRenderer:
         # the strip wraps, and a floor of one panel so a short strip still
         # fills the screen.
         x = min(x + 12, scratch.width)
-        return scratch.crop((0, 0, max(self.width, x), self.height)), clock_state
+        return (
+            scratch.crop((0, 0, max(self.width, x), self.height)),
+            clock_state,
+            fun_regions,
+        )
 
     def set_static_panel(self, panel) -> None:
         """Fix a card to the left module, or clear it with None."""
@@ -2692,9 +2750,12 @@ class StripRenderer:
                 self._pending_clock_state if self._pending_clock_state
                 else (None, None, None)
             )
+            self._fun_art_regions = list(self._pending_fun_art_regions or [])
+            self._fun_art_tick = -1.0
             self._pending = None
             self._pending_key = None
             self._pending_clock_state = None
+            self._pending_fun_art_regions = None
             return True
 
     def has_pending(self) -> bool:

@@ -4736,6 +4736,10 @@ def main():
     lit = sum(1 for y in range(32) for x in range(min(80, bw + 2))
               if fimg2.getpixel((x, y)) != (0, 0, 0))
     assert bw > 20 and lit > 30, (bw, lit)
+    # Animation: motion changes over time; refresh_fun_art repaints in place.
+    d0 = _kid_art.motion("ball", 0.0)
+    d1 = _kid_art.motion("ball", 0.4)
+    assert d0 != d1, (d0, d1)
     team_a = {"abbr": "NYY", "league": "mlb", "name": "Yankees"}
     g_a = {
         "id": "fun1", "league": "mlb", "state": STATE_FINAL, "start": "",
@@ -4744,6 +4748,15 @@ def main():
         "situation": {}, "leaders": [],
     }
     with_fun = rfun.build_strip([(team_a, [g_a])])
+    assert rfun._fun_art_regions, "fun bumpers must register animate regions"
+    before = with_fun.copy()
+    rfun.refresh_fun_art(10.0)
+    rfun.refresh_fun_art(10.25)  # new 20Hz tick
+    changed = sum(
+        1 for y in range(before.height) for x in range(before.width)
+        if before.getpixel((x, y)) != with_fun.getpixel((x, y))
+    )
+    assert changed > 0, "refresh_fun_art should move sprite pixels"
     roff = StripRenderer(
         FakeDisplay(192, 32),
         {"kid_friendly": True, "fun_art": {"enabled": False}},
@@ -4752,7 +4765,7 @@ def main():
     without_fun = roff.build_strip([(team_a, [g_a])])
     assert with_fun.width > without_fun.width, (
         with_fun.width, without_fun.width)
-    print("PASS  kid fun-art bumpers draw and widen the strip")
+    print("PASS  kid fun-art bumpers draw, animate, and widen the strip")
 
     # Daily condensation: daytime highs only, Title Case labels, unit convert.
     wx_daily = NWSWeather(log, 40.66, -74.11, units="C")
