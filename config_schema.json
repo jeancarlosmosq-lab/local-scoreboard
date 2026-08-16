@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Small original pixel characters that scroll by every so often. On automatically when Kid-Friendly Mode is on; turn off here if you want kid tips without the art. These are handmade sprites — not Mario, Pokemon, or other licensed mascots.",
+      "description": "Small original pixel characters that scroll by every so often and look like they are smashing the board (cracks, flying debris, sparks). On automatically when Kid-Friendly Mode is on; turn off here if you want kid tips without the art. These are handmade sprites — not Mario, Pokemon, or other licensed mascots.",
       "properties": {
         "enabled": {
           "type": "boolean",

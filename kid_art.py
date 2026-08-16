@@ -236,9 +236,32 @@ SPRITE_ORDER: Tuple[str, ...] = (
 )
 
 # Pixels of horizontal / vertical room reserved around each sprite so a
-# bounce or wiggle never clips into neighbouring strip content.
-MOTION_PAD_X = 2
-MOTION_PAD_Y = 3
+# bounce, wiggle, and flying wreckage never clips into neighbouring content.
+MOTION_PAD_X = 3
+MOTION_PAD_Y = 4
+# Extra width for debris / cracks so the character looks like it is
+# tearing through the panel, not just bobbing in empty black.
+WRECK_PAD_X = 5
+
+# Cheer words lean into the "wrecking the board" gag.
+CHEERS: Dict[str, str] = {
+    "rocket": "Kaboom!",
+    "dino": "Smash!",
+    "bot": "Zap!",
+    "kitty": "Pounce!",
+    "star": "Crash!",
+    "ball": "Wham!",
+    "comet": "Blast!",
+    "fish": "Chomp!",
+}
+
+# Debris / spark colours -- bright so they read as broken LEDs flying off.
+_DEBRIS = (
+    (255, 80, 60), (255, 200, 40), (120, 200, 255),
+    (255, 255, 255), (80, 255, 120), (255, 120, 200),
+)
+_CRACK = (90, 95, 110)
+_STATIC = (55, 60, 80)
 
 
 def pick_sprites(when_hour: int, count: int = 2,
@@ -327,6 +350,97 @@ def motion(sprite_id: str, t: float) -> Tuple[int, int, int]:
     return 0, dy, frame
 
 
+def label_for(sprite_id: str) -> str:
+    if sprite_id in CHEERS:
+        return CHEERS[sprite_id]
+    entry = SPRITES.get(sprite_id)
+    return entry[1] if entry else ""
+
+
+def draw_wreckage(draw, box_x: int, box_w: int, height: int,
+                  sprite_id: str, t: float,
+                  cx: int, cy: int) -> None:
+    """Paint cracks, sparks, and flying debris around a wrecking character.
+
+    The gag: it looks like the sprite is punching holes in the LED panel.
+    Deterministic from (sprite_id, t) so both bumpers stay lively without
+    needing per-frame particle state on the renderer.
+    """
+    phase = (sum(ord(c) for c in sprite_id) % 7) * 0.37
+    u = t + phase
+    seed = sum(ord(c) for c in sprite_id) * 17 + int(u * 8)
+
+    def rnd(i: int, mod: int) -> int:
+        # Tiny LCG-ish scramble -- no import random, stable across processes.
+        return abs((seed * 1103515245 + i * 12345) >> 8) % max(1, mod)
+
+    # Jagged cracks radiating from the character (broken glass / cracked LEDs).
+    for i in range(4):
+        angle = (u * 1.7 + i * 1.1) % (math.pi * 2)
+        length = 4 + rnd(i, 6)
+        x1, y1 = cx, cy
+        for step in range(1, length + 1):
+            jx = rnd(i * 10 + step, 3) - 1
+            jy = rnd(i * 11 + step, 3) - 1
+            x2 = int(round(cx + math.cos(angle) * step * 1.4)) + jx
+            y2 = int(round(cy + math.sin(angle) * step * 1.1)) + jy
+            if box_x <= x2 < box_x + box_w and 0 <= y2 < height:
+                draw.point((x2, y2), fill=_CRACK)
+                if step % 2 == 0 and 0 <= y2 + 1 < height:
+                    draw.point((x2, y2 + 1), fill=_CRACK)
+            x1, y1 = x2, y2
+
+    # "Missing LED" holes -- dark gaps punched in the panel.
+    for i in range(5):
+        hx = box_x + 1 + rnd(30 + i, max(1, box_w - 2))
+        hy = 1 + rnd(40 + i, max(1, height - 2))
+        # Drift holes outward over time so they look knocked loose.
+        hx = (hx + int(u * (2 + i % 3))) % max(1, box_w) + box_x
+        if box_x <= hx < box_x + box_w and 0 <= hy < height:
+            draw.point((hx, hy), fill=(15, 15, 20))
+            if hx + 1 < box_x + box_w:
+                draw.point((hx + 1, hy), fill=(25, 25, 30))
+
+    # Glitchy static stripes (broken row of LEDs).
+    if int(u * 6) % 3 == 0:
+        gy = rnd(50, max(1, height))
+        for gx in range(box_x, box_x + box_w, 2):
+            if rnd(gx + 3, 4) != 0:
+                draw.point((gx, gy), fill=_STATIC)
+
+    # Flying debris -- particles arcing away from the smash.
+    for i in range(8):
+        birth = (u * 2.5 + i * 0.35) % 1.4
+        # Parabola: shoot out, fall down.
+        speed = 3 + rnd(60 + i, 4)
+        ang = (i * 0.9 + phase) % (math.pi * 2)
+        px = int(round(cx + math.cos(ang) * speed * birth * 3))
+        py = int(round(cy + math.sin(ang) * speed * birth * 2
+                       + birth * birth * 10))
+        if not (box_x <= px < box_x + box_w and 0 <= py < height):
+            continue
+        colour = _DEBRIS[rnd(70 + i, len(_DEBRIS))]
+        draw.point((px, py), fill=colour)
+        # Occasional 2px chunk.
+        if rnd(80 + i, 3) == 0 and px + 1 < box_x + box_w:
+            draw.point((px + 1, py), fill=colour)
+
+    # Impact burst when the bounce "hits" (near floor of abs(sin)).
+    hit = abs(math.sin(u * 5.5))
+    if hit < 0.18:
+        for i in range(6):
+            ang = i * (math.pi / 3) + u
+            bx = int(round(cx + math.cos(ang) * 3))
+            by = int(round(cy + math.sin(ang) * 2))
+            if box_x <= bx < box_x + box_w and 0 <= by < height:
+                draw.point((bx, by), fill=_DEBRIS[i % len(_DEBRIS)])
+        # Cross spark at the hit.
+        for d in range(1, 3):
+            for px, py in ((cx + d, cy), (cx - d, cy), (cx, cy + d), (cx, cy - d)):
+                if box_x <= px < box_x + box_w and 0 <= py < height:
+                    draw.point((px, py), fill=(255, 255, 200))
+
+
 def blit(draw, x: int, y: int, sprite_id: str, scale: int = 2,
          frame: int = 0) -> Tuple[int, int]:
     """Paint one sprite frame; returns (width, height) including scale."""
@@ -346,8 +460,3 @@ def blit(draw, x: int, y: int, sprite_id: str, scale: int = 2,
             draw.rectangle(
                 [px, py, px + scale - 1, py + scale - 1], fill=colour)
     return w * scale, h * scale
-
-
-def label_for(sprite_id: str) -> str:
-    entry = SPRITES.get(sprite_id)
-    return entry[1] if entry else ""

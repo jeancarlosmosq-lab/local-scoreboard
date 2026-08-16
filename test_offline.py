@@ -4757,6 +4757,13 @@ def main():
         if before.getpixel((x, y)) != with_fun.getpixel((x, y))
     )
     assert changed > 0, "refresh_fun_art should move sprite pixels"
+    # Wreckage: cracks/debris should light pixels beyond a static sprite.
+    wreck_img = Image.new("RGB", (40, 32), (0, 0, 0))
+    wreck_draw = _KidID.Draw(wreck_img)
+    _kid_art.draw_wreckage(wreck_draw, 0, 40, 32, "dino", 1.25, 20, 16)
+    wreck_lit = sum(1 for y in range(32) for x in range(40)
+                    if wreck_img.getpixel((x, y)) != (0, 0, 0))
+    assert wreck_lit > 8, wreck_lit
     roff = StripRenderer(
         FakeDisplay(192, 32),
         {"kid_friendly": True, "fun_art": {"enabled": False}},

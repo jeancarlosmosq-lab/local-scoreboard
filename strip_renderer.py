@@ -1873,30 +1873,31 @@ class StripRenderer:
     def _draw_fun_bumper(self, img, draw, x: int, sprite_id: str,
                          font, row_h: int,
                          regions: Optional[List] = None) -> int:
-        """A small original pixel character + cheer word for kids.
+        """A wrecking pixel character + cheer -- cracks and debris included.
 
         Handmade sprites (rocket, dino, bot, …) -- not licensed mascots.
-        Scale 2 keeps them readable on a 32-row panel. The sprite column
-        is recorded so refresh_fun_art can animate it every frame.
+        The sprite column is wider than the character so refresh_fun_art
+        can paint flying wreckage without eating the next segment.
         """
         start = x
-        label = kid_art.label_for(sprite_id) or "!"
+        label = kid_art.label_for(sprite_id) or "Smash!"
         scale = 2 if self.height >= 28 else 1
         sw, sh = kid_art.sprite_size(sprite_id, scale=scale)
         if sw <= 0:
             return 0
-        pad_x = kid_art.MOTION_PAD_X
+        pad_x = kid_art.MOTION_PAD_X + kid_art.WRECK_PAD_X
         pad_y = kid_art.MOTION_PAD_Y
-        # Inset the sprite so a wiggle/bounce stays inside this bumper's
-        # own width instead of painting over the previous divider.
         sprite_x = x + pad_x
         base_oy = max(self.MARGIN + pad_y,
                       (self.height - sh) // 2)
-        kid_art.blit(draw, sprite_x, base_oy, sprite_id, scale=scale, frame=0)
         box_w = sw + pad_x * 2
+        # First paint: wreckage behind, character on top.
+        kid_art.draw_wreckage(
+            draw, x, box_w, self.height, sprite_id, 0.0,
+            sprite_x + sw // 2, base_oy + sh // 2,
+        )
+        kid_art.blit(draw, sprite_x, base_oy, sprite_id, scale=scale, frame=0)
         if regions is not None:
-            # (sprite_id, box_x, box_w, scale, base_oy) -- plain data so a
-            # worker process can ship it back with the strip image.
             regions.append((sprite_id, x, box_w, scale, base_oy))
         tx = x + box_w + 3
         start_row = self._vblock_start(row_h, 1)
@@ -1906,7 +1907,7 @@ class StripRenderer:
         return (tx + tw + 6) - start
 
     def refresh_fun_art(self, now_ts: float) -> None:
-        """Repaint fun-art sprites in place so they bob / bounce / flicker.
+        """Repaint fun-art sprites + wreckage so they smash the panel live.
 
         Caps at ~20 FPS of sprite updates -- plenty for a 32px character,
         and cheaper than redrawing on every matrix frame when the board
@@ -1914,7 +1915,6 @@ class StripRenderer:
         """
         if self._strip_cache is None or not self._fun_art_regions:
             return
-        # ~20 Hz is enough; skip if we already painted this tick window.
         tick = math.floor(now_ts * 20.0)
         if tick == self._fun_art_tick:
             return
@@ -1926,11 +1926,17 @@ class StripRenderer:
                 fill=(0, 0, 0),
             )
             dx, dy, frame = kid_art.motion(sprite_id, now_ts)
-            # Keep the sprite inside its reserved box.
             dx = max(-kid_art.MOTION_PAD_X, min(kid_art.MOTION_PAD_X, dx))
             dy = max(-kid_art.MOTION_PAD_Y, min(kid_art.MOTION_PAD_Y, dy))
-            sx = box_x + kid_art.MOTION_PAD_X + dx
+            inset = kid_art.MOTION_PAD_X + kid_art.WRECK_PAD_X
+            sx = box_x + inset + dx
             sy = base_oy + dy
+            sw, sh = kid_art.sprite_size(sprite_id, scale=scale)
+            cx = sx + max(1, sw) // 2
+            cy = sy + max(1, sh) // 2
+            kid_art.draw_wreckage(
+                draw, box_x, box_w, self.height, sprite_id, now_ts, cx, cy,
+            )
             kid_art.blit(draw, sx, sy, sprite_id, scale=scale, frame=frame)
 
     @staticmethod
