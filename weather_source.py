@@ -92,7 +92,7 @@ class NWSWeather:
 
     @staticmethod
     def _to_display(celsius, units: str):
-        """NWS reports Celsius; convert unless Celsius was asked for."""
+        """NWS station observations report Celsius; convert unless Celsius was asked for."""
         if celsius is None:
             return None
         try:
@@ -103,6 +103,25 @@ class NWSWeather:
             return int(round(value))
         return int(round(value * 9.0 / 5.0 + 32.0))
 
+    @staticmethod
+    def _convert_temp(value, from_unit: str, to_unit: str):
+        """Forecast/hourly temps arrive already in temperatureUnit (usually F)."""
+        if value is None:
+            return None
+        try:
+            amount = float(value)
+        except (TypeError, ValueError):
+            return None
+        src = (from_unit or "F").upper()
+        dst = (to_unit or "F").upper()
+        if src == dst:
+            return int(round(amount))
+        if src == "F" and dst == "C":
+            return int(round((amount - 32.0) * 5.0 / 9.0))
+        if src == "C" and dst == "F":
+            return int(round(amount * 9.0 / 5.0 + 32.0))
+        return int(round(amount))
+
     # ------------------------------------------------------------------
     def fetch(self) -> Dict:
         """Everything worth showing, in one dict. Empty on failure."""
@@ -111,7 +130,7 @@ class NWSWeather:
             return {}
 
         out = {
-            "label": (self.label or grid.get("city") or "").upper(),
+            "label": self.label or grid.get("city") or "",
             "units": self.units,
             "alerts": self._fetch_alerts(),
         }
@@ -120,47 +139,28 @@ class NWSWeather:
         periods = ((forecast or {}).get("properties") or {}).get("periods") or []
         if periods:
             now = periods[0]
+            src_unit = now.get("temperatureUnit", "F")
             out["period"] = (now.get("name") or "").upper()
             out["condition"] = (now.get("shortForecast") or "").upper()
-            out["temp"] = now.get("temperature")
-            out["temp_unit"] = now.get("temperatureUnit", "F")
+            out["temp"] = self._convert_temp(
+                now.get("temperature"), src_unit, self.units)
+            out["temp_unit"] = self.units
             # The next period is the other half of the day -- tonight's low
             # if it is currently daytime, tomorrow's high if it is not.
             if len(periods) > 1:
                 nxt = periods[1]
+                nxt_unit = nxt.get("temperatureUnit", src_unit)
                 out["next_name"] = (nxt.get("name") or "").upper()
-                out["next_temp"] = nxt.get("temperature")
+                out["next_temp"] = self._convert_temp(
+                    nxt.get("temperature"), nxt_unit, self.units)
                 out["next_condition"] = (nxt.get("shortForecast") or "").upper()
 
-        # Five daily periods, skipping the one already shown as "now".
-        out["daily"] = self._condense_daily(periods)
         out["hourly"] = self._fetch_hourly(grid)
 
         current = self._fetch_current(grid)
         if current:
             out.update(current)
 
-        return out
-
-    @staticmethod
-    def _condense_daily(periods, days: int = 5):
-        """Daytime periods only, as a five-day outlook.
-
-        NWS alternates day and night periods, so taking the first five
-        outright would give two and a half days. Only the daytime ones carry
-        the high, which is what a five-day forecast means to a reader.
-        """
-        out = []
-        for period in periods:
-            if not period.get("isDaytime"):
-                continue
-            out.append({
-                "name": (period.get("name") or "")[:3].upper(),
-                "temp": period.get("temperature"),
-                "condition": (period.get("shortForecast") or ""),
-            })
-            if len(out) >= days:
-                break
         return out
 
     def _fetch_hourly(self, grid: Dict, hours: int = 5):
@@ -182,9 +182,11 @@ class NWSWeather:
                     label = f"{hour}{moment.strftime('%p')[0]}"
                 except Exception:
                     label = ""
+            src_unit = period.get("temperatureUnit", "F")
             out.append({
                 "name": label,
-                "temp": period.get("temperature"),
+                "temp": self._convert_temp(
+                    period.get("temperature"), src_unit, self.units),
                 "condition": (period.get("shortForecast") or ""),
             })
         return out

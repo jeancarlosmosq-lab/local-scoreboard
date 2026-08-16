@@ -128,6 +128,10 @@ CATEGORY_LABELS = {
     "RYDS": "RUSH",
     "RECEIVINGYARDS": "REC",
     "RECYDS": "REC",
+    "GOAL": "GOAL",
+    "GOALS": "GOAL",
+    "TOTALSHOTS": "SHOTS",
+    "SHOTS": "SHOTS",
 }
 
 # Which side of the game a performance belongs to, so a board can show one
@@ -199,25 +203,28 @@ def ascii_fold(text: str) -> str:
 
 
 def abbreviate_name(full_name: str) -> str:
-    """"Aaron Judge" -> "A.JUDGE", with suffixes skipped.
+    """"Aaron Judge" -> "A.Judge", with suffixes skipped.
 
-    Upper case because these sit beside scores in a bitmap font, where mixed
-    case at seven pixels is harder to pick out than caps.
+    Only the first letter of the initial and of the last name are
+    capitalised -- the initial is a single letter so it's capital either
+    way, but the last name itself used to come back fully upper (A.JUDGE)
+    to stay legible at seven pixels beside a score. Matches the title
+    case used everywhere else on the strip now.
     """
     folded = ascii_fold(full_name)
     parts = [p for p in folded.split() if p]
     if not parts:
         return ""
     if len(parts) == 1:
-        return parts[0].upper()
+        return parts[0].capitalize()
 
     suffixes = {"jr", "sr", "ii", "iii", "iv", "v"}
     idx = len(parts) - 1
     while idx > 0 and parts[idx].lower().strip(".") in suffixes:
         idx -= 1
     if idx == 0:
-        return parts[0].upper()
-    return f"{parts[0][0]}.{parts[idx]}".upper()
+        return parts[0].capitalize()
+    return f"{parts[0][0].upper()}.{parts[idx].capitalize()}"
 
 
 class ESPNGamesSource:
@@ -244,11 +251,16 @@ class ESPNGamesSource:
 
     # ------------------------------------------------------------------
     def fetch_scoreboard(self, league: str, days_back: int = 1,
-                         days_forward: int = 7) -> List[Dict]:
+                         days_forward: int = 7) -> Optional[List[Dict]]:
         """Fetch a league's games across a date window.
 
         A window rather than a single day: "recent" needs yesterday's finals
         and "upcoming" needs the next week, and one request covers both.
+
+        Returns an empty list when the request succeeded but there are no
+        games in the window. Returns None when the request itself failed --
+        callers must not treat that the same as "no games", or a single
+        league outage wipes that league's already-known scores off the board.
         """
         if league not in LEAGUES:
             return []
@@ -267,7 +279,7 @@ class ESPNGamesSource:
             data = response.json()
         except Exception as e:
             self.logger.error("Error fetching %s scoreboard: %s", league, e)
-            return []
+            return None
 
         return self._parse_events(data, league)
 
@@ -303,14 +315,21 @@ class ESPNGamesSource:
     def _parse_standings(data: Dict) -> Dict[str, str]:
         """Every team's streak, flattened out of standings' own grouping
         by division/conference -- a team is missed if only the top-level
-        list is read, since none of the real entries live there."""
-        out = {}
-        for group in (data or {}).get("children", []) or []:
-            for entry in ((group.get("standings") or {}).get("entries") or []):
+        list is read, since none of the real entries live there.
+
+        ESPN nests conference → division for some leagues (MLB often does),
+        so this walks children recursively rather than one level deep.
+        """
+        out: Dict[str, str] = {}
+
+        def walk(node: Dict) -> None:
+            if not isinstance(node, dict):
+                return
+            for entry in ((node.get("standings") or {}).get("entries") or []):
                 abbr = ascii_fold(
                     (entry.get("team") or {}).get("abbreviation", "")
                 )
-                if not abbr:
+                if not abbr or abbr in out:
                     continue
                 for stat in entry.get("stats", []) or []:
                     if stat.get("type") == "streak":
@@ -318,6 +337,10 @@ class ESPNGamesSource:
                         if value and value != "-":
                             out[abbr] = value
                         break
+            for child in node.get("children") or []:
+                walk(child)
+
+        walk(data or {})
         return out
 
     def _parse_events(self, data: Dict, league: str) -> List[Dict]:
@@ -633,7 +656,62 @@ class ESPNGamesSource:
             self.logger.debug("No summary for %s/%s: %s", league, event_id, e)
             return []
 
+        # Soccer scoreboard competitions carry no leaders block; the summary
+        # does, but goal scorers live in keyEvents and are what a fan
+        # actually wants under a BAR (or any La Liga) card. Prefer those,
+        # then fall back to summary leaders (shots etc.).
+        if league == "laliga":
+            scorers = self._parse_soccer_scorers(data, per_game)
+            if scorers:
+                return scorers
         return self._parse_leaders(data, per_game, league)
+
+    @staticmethod
+    def _parse_soccer_scorers(data: Dict, per_game: int = 4) -> List[Dict]:
+        """Goal scorers from summary keyEvents (scoringPlay=true)."""
+        id_to_abbr = {}
+        for competitor in (
+            ((data.get("header") or {}).get("competitions") or [{}])[0]
+            .get("competitors") or []
+        ):
+            team = competitor.get("team") or {}
+            tid = str(team.get("id") or "")
+            abbr = ascii_fold(team.get("abbreviation", ""))
+            if tid and abbr:
+                id_to_abbr[tid] = abbr
+
+        out = []
+        for event in data.get("keyEvents") or []:
+            if not event.get("scoringPlay"):
+                continue
+            participants = event.get("participants") or []
+            if not participants:
+                continue
+            athlete = (participants[0].get("athlete") or {})
+            full_name = ascii_fold(
+                athlete.get("displayName") or athlete.get("shortName", "")
+            )
+            name = abbreviate_name(full_name)
+            if not name:
+                continue
+            clock = ascii_fold(
+                ((event.get("clock") or {}).get("displayValue") or "")
+            )
+            team_id = str((event.get("team") or {}).get("id") or "")
+            team_abbr = id_to_abbr.get(team_id, "")
+            kind = ((event.get("type") or {}).get("text") or "Goal")
+            line = clock or ascii_fold(kind)
+            out.append({
+                "team": team_abbr,
+                "name": name,
+                "full_name": full_name,
+                "line": line,
+                "category": "GOAL",
+                "side": SIDE_BATTING,
+            })
+            if len(out) >= per_game:
+                break
+        return out
 
     @staticmethod
     def _parse_leaders(data: Dict, per_game: int = 4, league: str = "mlb") -> List[Dict]:

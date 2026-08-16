@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """
-Find out why the hourly and five-day forecast are not appearing, while the
-current temperature is.
+Find out why the hourly forecast is not appearing, while the current
+temperature is.
 
 The plugin's weather fetch is a three-step chain:
 
     1. /points/{lat},{lon}       -> forecast office + grid square, and the
                                      URLs for the daily and hourly forecasts
-    2. the daily forecast URL    -> today's and tonight's conditions, plus
-                                     the periods the five-day list is built
-                                     from
+    2. the daily forecast URL    -> today's and tonight's conditions (the
+                                     "now"/"period" fields) -- fetched for
+                                     that, not for a multi-day list, which
+                                     this plugin no longer shows
     3. the hourly forecast URL   -> the next several hours, one entry each
 
 Current temperature comes from a separate, fourth call to the nearest
 observation station, which is why it can work while the other three do not:
-a failure anywhere in steps 1-3 leaves "hourly" and "daily" empty without
-otherwise breaking the segment.
+a failure anywhere in steps 1-3 leaves "hourly" (and "now"/"period") empty
+without otherwise breaking the segment.
 
 This script walks all three steps for your configured point and reports
 exactly what came back at each one, so the fix targets the real point of
@@ -84,12 +85,14 @@ def main():
     print(f"    forecastHourly URL   : {hourly_url or 'MISSING'}")
     if not forecast_url:
         print("    'forecast' key is missing from the response -- this is")
-        print("    the field the daily/five-day list depends on entirely.")
+        print("    the field 'now'/'period' current-conditions depend on")
+        print("    entirely.")
     if not hourly_url:
         print("    'forecastHourly' key is missing -- this is the field the")
         print("    hourly list depends on entirely.")
 
-    print("\n[2] Daily forecast (also supplies the five-day list)")
+    print("\n[2] Daily forecast (only its first period is used, for "
+          "current conditions)")
     if forecast_url:
         fdata, ferr, fstatus = get(forecast_url)
         if ferr:
@@ -97,17 +100,15 @@ def main():
         else:
             periods = ((fdata or {}).get("properties") or {}).get("periods") or []
             print(f"    OK -- {len(periods)} period(s) returned")
-            daytime = [p for p in periods if p.get("isDaytime")]
-            print(f"    {len(daytime)} of those are daytime periods "
-                  f"(what the five-day list is built from)")
             for p in periods[:4]:
                 print(f"      {p.get('name', '?'):16} "
                       f"daytime={p.get('isDaytime')}  "
                       f"temp={p.get('temperature')}  "
                       f"{p.get('shortForecast', '')}")
-            if not daytime:
-                print("    No daytime periods at all -- the five-day list")
-                print("    will be empty even though this call succeeded.")
+            if not periods:
+                print("    No periods at all -- current conditions ('now'/")
+                print("    'period') will be empty even though this call "
+                      "succeeded.")
     else:
         print("    SKIPPED -- no forecast URL from step 1")
 

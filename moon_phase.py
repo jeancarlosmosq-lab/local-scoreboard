@@ -21,15 +21,15 @@ _REFERENCE_NEW_MOON = datetime(2000, 1, 6, 18, 14)
 # and Full narrowed slightly since those are the two moments a name
 # should actually mean "at or very near," not "closest of eight options."
 _PHASE_BOUNDS = [
-    (0.033, "NEW MOON"),
-    (0.219, "WAXING CRESCENT"),
-    (0.281, "FIRST QUARTER"),
-    (0.469, "WAXING GIBBOUS"),
-    (0.531, "FULL MOON"),
-    (0.719, "WANING GIBBOUS"),
-    (0.781, "LAST QUARTER"),
-    (0.967, "WANING CRESCENT"),
-    (1.001, "NEW MOON"),
+    (0.033, "New Moon"),
+    (0.219, "Waxing Crescent"),
+    (0.281, "First Quarter"),
+    (0.469, "Waxing Gibbous"),
+    (0.531, "Full Moon"),
+    (0.719, "Waning Gibbous"),
+    (0.781, "Last Quarter"),
+    (0.967, "Waning Crescent"),
+    (1.001, "New Moon"),
 ]
 
 

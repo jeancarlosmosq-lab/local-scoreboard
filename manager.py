@@ -22,6 +22,9 @@ thoroughly, one league at a time. This one answers a different question --
 """
 
 import logging
+import json
+import os
+import threading
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -143,6 +146,18 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self._current_mode: Optional[str] = None
         self._last_update = 0.0
         self._drew_placeholder = False
+        # See update()/_dispatch_background_update's own comment: the host
+        # framework holds a per-plugin lock for the duration of update(),
+        # and skips that plugin's display() entirely while it's held --
+        # the panel just shows its last frame. The actual data fetch this
+        # method used to do inline is real network I/O (confirmed on the
+        # Pi: ~1s per cycle with a normal number of live games), which
+        # made the display visibly freeze for a large fraction of every
+        # live_interval. Backgrounding it here fixes that at the source,
+        # the same way strip_renderer.py backgrounds strip composition.
+        self._refresh_lock = threading.Lock()
+        self._refresh_in_flight = False
+        self._refresh_thread: Optional[threading.Thread] = None
 
         if self.renderer is not None:
             self.logger.info("Local Scoreboard initialised: %s",
@@ -186,6 +201,12 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         other_cfg = self.config.get("other_live_games", {})
         self.teams_other_live_on = other_cfg.get("enabled", True)
         self.teams_other_live_limit = int(other_cfg.get("limit", 5))
+        self.teams_other_live_followed_leagues_only = bool(
+            other_cfg.get("followed_leagues_only", False)
+        )
+        self.teams_other_live_per_league_limit = int(
+            other_cfg.get("per_league_limit", 0) or 0
+        )
 
         # Days until a configured, recurring annual date -- a birthday, a
         # holiday. Empty by default, same as star_players once was: these
@@ -202,7 +223,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             float(weather_cfg.get("latitude", 40.6687)),
             float(weather_cfg.get("longitude", -74.1143)),
         )
-        self.teams_weather_label = weather_cfg.get("label", "BAYONNE")
+        self.teams_weather_label = weather_cfg.get("label", "Bayonne")
         self.teams_weather_units = weather_cfg.get("units", "F")
         self.teams_weather_interval = float(weather_cfg.get("interval", 900))
         # Off by default -- the original design keeps the whole weather
@@ -242,6 +263,12 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         # together, which is the thing card-by-card rotation cannot do.
         self.teams_layout = self.config.get("layout", "strip")
         self.teams_scroll_speed = float(self.config.get("scroll_speed", 22))
+        self.teams_rivalry_live_boost = max(
+            0, min(3, int(self.config.get("rivalry_live_boost", 1)))
+        )
+        self.teams_rivalry_scroll_factor = max(
+            0.3, min(1.0, float(self.config.get("rivalry_scroll_factor", 0.7)))
+        )
 
         # League leaders ride on the same strip, so the board shows scores and
         # leaderboards in one scroll rather than handing between two plugins.
@@ -341,6 +368,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self.teams_leaders_per_game = 0
         self.teams_layout = "strip"
         self.teams_scroll_speed = 22.0
+        self.teams_rivalry_live_boost = 0
+        self.teams_rivalry_scroll_factor = 1.0
         self.teams_leaderboards_on = False
         self.teams_leader_categories = []
         self.teams_leader_scopes = []
@@ -358,6 +387,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self.teams_panel_phase = 5.0
         self.teams_other_live_on = False
         self.teams_other_live_limit = 5
+        self.teams_other_live_followed_leagues_only = False
+        self.teams_other_live_per_league_limit = 0
         self.teams_countdowns_on = False
         self.teams_countdown_events = []
         self.teams_countdown_limit = 3
@@ -378,11 +409,27 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         Editing settings is how someone says "this looks wrong", so the next
         tick refetches rather than serving whatever is cached.
         """
+        # Let any in-flight refresh / strip compose finish against the old
+        # managers before we replace them -- otherwise the background thread
+        # can write into an abandoned GamesManager while the new one keeps
+        # a stale copy of _games only.
+        self._wait_for_background_update(timeout=2.0)
+        previous_strip = getattr(self, "strip", None)
+        if previous_strip is not None:
+            previous_strip._wait_for_background_build(timeout=2.0)
+
         previous = getattr(self, "games", None)
         self._apply_config(new_config)
         self._build_components()
         if previous is not None and self.games is not None:
-            self.games._games = previous._games
+            self.games._games = list(previous._games)
+            self.games._other_live = list(getattr(previous, "_other_live", []) or [])
+            self.games._streaks = dict(getattr(previous, "_streaks", {}) or {})
+            self.games._far_future_cache = dict(
+                getattr(previous, "_far_future_cache", {}) or {})
+            self.games._next_game_checked = dict(
+                getattr(previous, "_next_game_checked", {}) or {})
+            self.games._fetched_at = getattr(previous, "_fetched_at", 0.0)
         self._last_update = 0.0
         self._index.clear()
         self._seen.clear()
@@ -481,67 +528,141 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         gate = self.teams_live_interval if fast else self.teams_idle_interval
         if now - self._last_update < gate and self.games.has_data():
             return
-        try:
-            self.games.refresh(force=fast)
-            self.games.refresh_streaks()
+        # Only advance the gate when a refresh actually starts. Stamping
+        # before a single-flight no-op burned the interval and left live
+        # scores stale for ~2x live_interval on a slow fetch day.
+        if self._dispatch_background_update(fast):
             self._last_update = now
-            if self.leaders is not None:
-                # Season leaders move slowly; the manager's own cache decides
-                # when a refetch is actually due.
-                needs_rookies = "roy" in self.teams_award_keys
-                for scope in self.teams_leader_scopes:
-                    for group in ("hitting", "pitching"):
-                        self.leaders.refresh(group, scope)
-                        if needs_rookies:
-                            self.leaders.refresh(group, scope, pool="rookie")
 
-                # A team whose best player never cracks a league-wide
-                # leaderboard's top N gets no MVP from team_best() at all --
-                # most followed teams, most of the time. Only fetch a whole
-                # roster (a much bigger request than the leaderboards
-                # themselves) for a team that actually needs it, and never
-                # from the render path -- refresh_team_roster is throttled
-                # on its own slow cache, same as everything else here.
-                if self.awards is not None:
-                    for team in self.teams_config:
-                        if team.get("league") != "mlb":
-                            continue
-                        abbr = team.get("abbr", "")
-                        has_league_mvp = any(
-                            self.awards.team_best(abbr, scope)
-                            for scope in (self.teams_leader_scopes or ["mlb"])
-                        )
-                        if not has_league_mvp:
-                            self.leaders.refresh_team_roster(abbr)
+    def _dispatch_background_update(self, fast: bool) -> bool:
+        """Runs the actual data refresh -- games, streaks, leaders, weather,
+        logos -- on a background thread, so update() itself always returns
+        almost immediately.
 
-            if self.weather is not None:
-                now = time.time()
-                if now - self._weather_at >= self.teams_weather_interval:
-                    fetched = self.weather.fetch()
-                    if fetched:
-                        self._weather_data = fetched
-                        self._weather_at = now
-                        alerts = fetched.get("alerts") or []
-                        self.logger.info(
-                            "Weather: %s%s, %s%s",
-                            fetched.get("now_temp", "?"),
-                            fetched.get("units", ""),
-                            fetched.get("now_condition", ""),
-                            f" [{alerts[0]['event']}]" if alerts else "",
-                        )
+        The host framework's plugin_manager holds a per-plugin lock for the
+        duration of update(), and skips that plugin's display() entirely
+        while update() is still running -- the panel just shows its last
+        pushed frame rather than a new one. That's invisible as long as
+        update() is fast, but the real work here is genuine network I/O:
+        confirmed directly against the Pi, games.refresh() alone took
+        ~1 second per call with a normal live-game load, every
+        live_interval (5s) -- meaning the display was frozen for roughly a
+        fifth of every five seconds, worse on a day with more live games to
+        fetch. Threading is enough here, unlike strip_renderer.py's move to
+        a separate *process* for composition: that was working around GIL
+        contention from real CPU-bound drawing work competing with the
+        render thread, but a network call releases the GIL while it waits,
+        so a background thread costs the render loop nothing.
 
-            if self.teams_show_logos and self.logos is not None:
-                pairs = {
-                    (g["league"], side["abbr"])
-                    for g in self.games.games()
-                    for side in (g["away"], g["home"])
-                    if side.get("abbr")
-                }
-                if pairs:
-                    self.logos.prefetch(sorted(pairs),
-                                        max(6, self.display_height // 4))
-        except Exception as e:
-            self.logger.error("Error updating games: %s", e)
+        Single-flight, guarded by _refresh_lock: update()'s own gate
+        already limits how often this is called, but a slow network day
+        could in principle still have one dispatch still running when the
+        next would-be dispatch arrives, and starting a second one
+        concurrently would only make the network contention worse, not
+        fix anything. Returns True when a new thread was started, False
+        when one was already in flight (caller must not burn the gate).
+
+        GamesManager.refresh() and friends stay fully synchronous
+        themselves -- deliberately. Every test in test_offline.py that
+        calls games.refresh() depends on it being finished by the time the
+        call returns; making it asynchronous by default would break that
+        contract for everything that already works. This wraps the call
+        from the outside instead, the same relationship
+        _dispatch_background_build has to _compose_strip in
+        strip_renderer.py.
+        """
+        with self._refresh_lock:
+            if self._refresh_in_flight:
+                return False
+            self._refresh_in_flight = True
+
+        def _run() -> None:
+            try:
+                self.games.refresh(force=fast)
+                self.games.refresh_streaks()
+                if self.leaders is not None:
+                    # Season leaders move slowly; the manager's own cache
+                    # decides when a refetch is actually due.
+                    needs_rookies = "roy" in self.teams_award_keys
+                    for scope in self.teams_leader_scopes:
+                        for group in ("hitting", "pitching"):
+                            self.leaders.refresh(group, scope)
+                            if needs_rookies:
+                                self.leaders.refresh(group, scope, pool="rookie")
+
+                    # A team whose best player never cracks a league-wide
+                    # leaderboard's top N gets no MVP from team_best() at
+                    # all -- most followed teams, most of the time. Only
+                    # fetch a whole roster (a much bigger request than the
+                    # leaderboards themselves) for a team that actually
+                    # needs it, and never from the render path --
+                    # refresh_team_roster is throttled on its own slow
+                    # cache, same as everything else here.
+                    if self.awards is not None:
+                        for team in self.teams_config:
+                            if team.get("league") != "mlb":
+                                continue
+                            abbr = team.get("abbr", "")
+                            has_league_mvp = any(
+                                self.awards.team_best(abbr, scope)
+                                for scope in (self.teams_leader_scopes or ["mlb"])
+                            )
+                            if not has_league_mvp:
+                                self.leaders.refresh_team_roster(abbr)
+
+                if self.weather is not None:
+                    weather_now = time.time()
+                    if weather_now - self._weather_at >= self.teams_weather_interval:
+                        fetched = self.weather.fetch()
+                        if fetched:
+                            self._weather_data = fetched
+                            self._weather_at = weather_now
+                            alerts = fetched.get("alerts") or []
+                            self.logger.info(
+                                "Weather: %s%s, %s%s",
+                                fetched.get("now_temp", "?"),
+                                fetched.get("units", ""),
+                                fetched.get("now_condition", ""),
+                                f" [{alerts[0]['event']}]" if alerts else "",
+                            )
+
+                if self.teams_show_logos and self.logos is not None:
+                    pairs = {
+                        (g["league"], side["abbr"])
+                        for g in self.games.games()
+                        for side in (g["away"], g["home"])
+                        if side.get("abbr")
+                    }
+                    if pairs:
+                        self.logos.prefetch(sorted(pairs),
+                                            max(6, self.display_height // 4))
+            except Exception as e:
+                self.logger.error("Error updating games: %s", e, exc_info=True)
+            finally:
+                with self._refresh_lock:
+                    self._refresh_in_flight = False
+
+        thread = threading.Thread(target=_run, daemon=True,
+                                  name="scoreboard-update")
+        self._refresh_thread = thread
+        thread.start()
+        return True
+
+    def _wait_for_background_update(self, timeout: float = 5.0) -> bool:
+        """Block until any in-flight background update() dispatch finishes.
+
+        Never called from update()/display() themselves -- the whole point
+        of backgrounding is that nothing on that path waits on it. Exists
+        for tests, which need a deterministic point to synchronize on
+        rather than a real wall-clock race against a daemon thread -- the
+        same relationship StripRenderer._wait_for_background_build has to
+        its own background compose.
+        """
+        thread = self._refresh_thread
+        if thread is not None:
+            thread.join(timeout)
+            return not thread.is_alive()
+        return True
 
     # ------------------------------------------------------------------
     def display(self, display_mode: str = None, force_clear: bool = False) -> bool:
@@ -558,7 +679,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             if not self._drew_placeholder and (
                     self.games is None or not self.games.has_data()):
                 self._drew_placeholder = True
-                return self.renderer.draw_message("LOADING")
+                return self.renderer.draw_message("Loading")
             return False
 
         self._drew_placeholder = False
@@ -617,7 +738,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                     continue
                 stat = ALL_CATEGORIES.get(category, {}).get(
                     "label", category.upper())
-                title = f"{label} {stat} LEADERS".strip()
+                title = f"{label} {stat} Leaders".strip()
                 boards.append((
                     title, rows[: self.teams_leader_depth], stat, scope,
                 ))
@@ -835,7 +956,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         if not teams:
             if not self._drew_placeholder:
                 self._drew_placeholder = True
-                return self.strip.draw_message("LOADING")
+                return self.strip.draw_message("Loading")
             return False
         self._drew_placeholder = False
 
@@ -849,7 +970,21 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 for t, games in teams_and_games
             ]
         teams_and_games = [(t, g) for t, g in teams_and_games if g]
-        if not teams_and_games:
+        other_live = (
+            self.games.other_live_games(
+                self.teams_other_live_limit,
+                followed_leagues_only=self.teams_other_live_followed_leagues_only,
+                per_league_limit=self.teams_other_live_per_league_limit,
+            )
+            if self.teams_other_live_on else []
+        )
+        # The panel absorbs a followed live game out of the scroll. When that
+        # game was the only headline left, teams_and_games goes empty -- and
+        # returning False here used to leave the panel image set in memory
+        # without ever calling draw_strip, so nothing painted (confirmed:
+        # one followed live team + other-live elsewhere). Keep going whenever
+        # there is still a panel, other-live, or any remaining scroll content.
+        if not teams_and_games and not other_live and panel_game is None:
             return False
 
         labels = {
@@ -874,10 +1009,6 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             boards, awards, countdown_events = [], [], []
         weather_show_forecast = not (
             any_live and self.teams_weather_hide_forecast_when_live
-        )
-        other_live = (
-            self.games.other_live_games(self.teams_other_live_limit)
-            if self.teams_other_live_on else []
         )
         streaks = self._streaks()
 
@@ -906,6 +1037,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             weather_show_forecast=weather_show_forecast,
             show_clock=show_clock,
             weather_show_current=show_clock,
+            rivalry_live_boost=self.teams_rivalry_live_boost,
         )
         if built is None:
             return False
@@ -922,7 +1054,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
 
         elapsed = max(0.0, min(1.0, now - self._scroll_last_ts))
         self._scroll_last_ts = now
-        self._scroll_offset += elapsed * self.teams_scroll_speed
+        speed = self._effective_scroll_speed(teams_and_games, panel_game)
+        self._scroll_offset += elapsed * speed
 
         reached_seam = bool(span and self._scroll_offset >= span)
         if reached_seam:
@@ -955,6 +1088,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                     weather_show_forecast=weather_show_forecast,
                     show_clock=show_clock,
                     weather_show_current=show_clock,
+                    rivalry_live_boost=self.teams_rivalry_live_boost,
                 )
                 self._scroll_offset = 0.0
                 self.logger.debug(
@@ -966,6 +1100,50 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         # change would cost hundreds of milliseconds.
         self.strip.refresh_clock(datetime.now())
         return self.strip.draw_strip(built, self._scroll_offset)
+
+    def _effective_scroll_speed(self, teams_and_games, panel_game=None) -> float:
+        """Base scroll speed, slowed while a followed rivalry game is live."""
+        speed = max(1.0, self.teams_scroll_speed)
+        factor = getattr(self, "teams_rivalry_scroll_factor", 1.0)
+        if factor >= 0.999:
+            return speed
+        if panel_game is not None:
+            for team in self.teams_config:
+                rivals = team.get("rivals") or []
+                if not rivals:
+                    continue
+                if self._game_is_rivalry(
+                        panel_game, focus_abbr=team.get("abbr", ""),
+                        rivals=rivals):
+                    return max(1.0, speed * factor)
+        for team, games in teams_and_games or []:
+            rivals = team.get("rivals") or []
+            if not rivals:
+                continue
+            for game in games:
+                if game.get("state") == STATE_LIVE and self._game_is_rivalry(
+                        game, focus_abbr=team.get("abbr", ""), rivals=rivals):
+                    return max(1.0, speed * factor)
+        return speed
+
+    @staticmethod
+    def _game_is_rivalry(game: Dict, focus_abbr: str = "",
+                         rivals: Optional[List] = None) -> bool:
+        if rivals is None:
+            return False
+        home = (game.get("home") or {}).get("abbr", "")
+        away = (game.get("away") or {}).get("abbr", "")
+        wanted = abbr_group(focus_abbr) if focus_abbr else set()
+        if wanted and home.upper() in wanted:
+            theirs = away
+        elif wanted and away.upper() in wanted:
+            theirs = home
+        else:
+            theirs = away
+        rival_abbrs = set()
+        for a in rivals:
+            rival_abbrs |= abbr_group(str(a))
+        return bool(rival_abbrs and abbr_group(theirs) & rival_abbrs)
 
     def _advance_if_due(self, mode: str, games: List[Dict]) -> None:
         if not games:
@@ -983,6 +1161,12 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             if not teams or self.strip is None:
                 return None
             pairs = [(t, self.games.headline_games(t)) for t in teams]
+            panel_game, _ = self._panel_game()
+            if panel_game is not None:
+                pairs = [
+                    (t, [g for g in games if g.get("id") != panel_game.get("id")])
+                    for t, games in pairs
+                ]
             pairs = [(t, g) for t, g in pairs if g]
             any_live = self.games.has_any_live()
             boards, awards = self._leaderboards()
@@ -993,11 +1177,16 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 any_live and self.teams_weather_hide_forecast_when_live
             )
             other_live = (
-                self.games.other_live_games(self.teams_other_live_limit)
+                self.games.other_live_games(
+                    self.teams_other_live_limit,
+                    followed_leagues_only=self.teams_other_live_followed_leagues_only,
+                    per_league_limit=self.teams_other_live_per_league_limit,
+                )
                 if self.teams_other_live_on else []
             )
-            panel_game, _ = self._panel_game()
-            built = (self.strip.build_strip(
+            if not pairs and not other_live and panel_game is None:
+                return None
+            built = self.strip.build_strip(
                 pairs, leaderboards=boards, awards=awards,
                 weather=self._weather_data,
                 clock=datetime.now(),
@@ -1007,10 +1196,11 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 streaks=self._streaks(),
                 weather_show_forecast=weather_show_forecast,
                 show_clock=panel_game is not None,
-                weather_show_current=panel_game is not None) if pairs else None)
+                weather_show_current=panel_game is not None,
+                rivalry_live_boost=self.teams_rivalry_live_boost)
             if built is None:
                 return None
-            speed = max(1.0, self.teams_scroll_speed)
+            speed = self._effective_scroll_speed(pairs, panel_game)
             span = self.strip.scroll_span(built)
             duration = span / speed
             return min(duration, self.teams_max_visit)
@@ -1079,6 +1269,15 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         return bool(self.games and self.games.has_live())
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _manifest_version() -> str:
+        try:
+            path = os.path.join(os.path.dirname(__file__), "manifest.json")
+            with open(path, encoding="utf-8") as fh:
+                return str(json.load(fh).get("version") or "0.0.0")
+        except Exception:
+            return "0.0.0"
+
     def get_info(self) -> Dict[str, Any]:
         try:
             counts = {}
@@ -1088,7 +1287,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
             return {
                 "plugin_id": self.plugin_id,
                 "name": "Local Scoreboard",
-                "version": "0.1.0",
+                "version": self._manifest_version(),
                 "enabled": self.is_enabled,
                 "display_size": f"{self.display_width}x{self.display_height}",
                 "display_profile": (self.renderer.profile.describe()

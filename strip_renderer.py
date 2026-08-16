@@ -26,6 +26,7 @@ import logging
 import math
 import multiprocessing
 import os
+import sys
 import threading
 import time
 import unicodedata
@@ -43,6 +44,24 @@ except ImportError:  # pragma: no cover
 
 
 MIN_LEGIBLE_ROW_H = 6
+
+# Captured at import time, while sys.modules still holds this module under
+# its own bare name -- the host framework's plugin loader renames that
+# entry to a namespaced key (e.g. "_plg_local-scoreboard_strip_renderer")
+# immediately after loading, specifically so two different plugins that
+# happen to both ship a "strip_renderer.py" don't collide in sys.modules.
+# That's the right call for the framework in general, but it breaks
+# pickling _compose_worker_main by reference: multiprocessing's spawn start
+# method pickles the Process target as (module_name, qualname) and verifies
+# it by looking up sys.modules[module_name] at pickle time, which fails
+# ("not the same object as strip_renderer._compose_worker_main") once the
+# bare "strip_renderer" key is gone. _ensure_compose_process briefly
+# restores this exact module under its own name in sys.modules for just the
+# call to Process.start() (which pickles synchronously, in the calling
+# thread, before it returns), then removes it again immediately afterward
+# so the framework's own namespace isolation still holds the rest of the
+# time.
+_THIS_MODULE = sys.modules[__name__]
 
 
 def _compose_worker_main(conn, width: int, height: int,
@@ -451,7 +470,7 @@ class StripRenderer:
             return None
 
     # ------------------------------------------------------------------
-    # Segment drawing
+    # Segment Drawing
     # ------------------------------------------------------------------
     def _smaller_font(self, draw, than_row_h: int):
         """The largest available font strictly shorter than than_row_h.
@@ -498,27 +517,41 @@ class StripRenderer:
         slack = max(0, available - content_h)
         return self.MARGIN + slack // 2
 
-    def _text_top(self, draw, font, target_row: int) -> int:
+    def _text_top(self, draw, font, target_row: int, sample: str = "0") -> int:
         """The y to pass to draw.text so the glyph's ink starts at target_row.
 
         This font carries a few pixels of built-in top leading on every
         glyph -- draw.text at y=1 puts the first visible pixel around y=4,
         not y=1. The leading is blank by definition, so pulling the origin
         up by that amount and letting it fall above the canvas costs nothing.
+
+        `sample` defaults to a digit because nearly everything on this strip
+        used to be drawn all-caps or numeric, and a digit's own ink-top lines
+        up with a cap letter's. That default stopped being safe the moment
+        mixed-case labels ("Final", "Feels Like") were introduced: a
+        lowercase ascender/dot can sit a pixel above where a digit's own
+        ink starts in this sandbox's fallback font, which put a status
+        label's ink a pixel above its intended row (confirmed: "Final"
+        wrong, reverting to "FINAL" fixed it, isolating the cause to the
+        specific glyphs, not any of that session's other changes). Passing
+        the actual text being positioned measures its own real leading
+        instead of guessing from a digit that may not represent it.
         """
-        leading = draw.textbbox((0, 0), "0", font=font)[1]
+        leading = draw.textbbox((0, 0), sample or "0", font=font)[1]
         return target_row - leading
 
-    def _text_bottom(self, draw, font, target_bottom_row: int) -> int:
+    def _text_bottom(self, draw, font, target_bottom_row: int,
+                     sample: str = "0") -> int:
         """The y to pass to draw.text so the glyph's ink ends at target_bottom_row.
 
         The same leading that pushes a top-anchored row down means a
         bottom-anchored row cannot simply be placed at height-row_h: the
         glyph's true reach below its origin is the bounding box's bottom
         edge, not a plain height measurement, which is what clipped the
-        forecast temperatures against the panel edge.
+        forecast temperatures against the panel edge. See _text_top for why
+        `sample` matters once mixed-case text is in play.
         """
-        extent = draw.textbbox((0, 0), "0", font=font)[3]
+        extent = draw.textbbox((0, 0), sample or "0", font=font)[3]
         return target_bottom_row - extent
 
     def _draw_banner(self, img, draw, x: int, team: Dict, font, row_h: int,
@@ -548,7 +581,7 @@ class StripRenderer:
                 img.paste(logo.convert("RGB"), (x, oy))
             x += logo.width + 4
 
-        name = self._safe((team.get("name") or team.get("abbr") or "").upper())
+        name = self._safe(team.get("name") or team.get("abbr") or "")
         nw, nh = self._measure(draw, name, font)
         draw.text((x, max(0, (self.height - nh) // 2)), name, font=font,
                   fill=self.LABEL)
@@ -645,7 +678,7 @@ class StripRenderer:
         top = self.MARGIN + max(0, (self.height - self.MARGIN * 2 - size) // 2)
         x += self._draw_trophy(draw, x, top, size) + 6
 
-        title, subtitle = "MLB", "AWARDS WATCH"
+        title, subtitle = "MLB", "Awards Watch"
         text_top = self._text_top(draw, font, self._vblock_start(row_h, 2))
         draw.text((x, text_top), self._safe(title), font=font, fill=self.UPCOMING)
         draw.text((x, text_top + row_h), self._safe(subtitle), font=font,
@@ -672,13 +705,11 @@ class StripRenderer:
         top = self.MARGIN + max(0, (self.height - self.MARGIN * 2 - size) // 2)
         x += self._draw_live_pulse(draw, x, top, size) + 6
 
-        title, subtitle = "LIVE", "AROUND THE LEAGUE"
-        text_top = self._text_top(draw, font, self._vblock_start(row_h, 2))
+        title = "Live"
+        text_top = self._text_top(draw, font, self._vblock_start(row_h, 1),
+                                  sample=title)
         draw.text((x, text_top), self._safe(title), font=font, fill=self.LIVE)
-        draw.text((x, text_top + row_h), self._safe(subtitle), font=font,
-                  fill=self.DIM)
-        x += max(self._measure(draw, title, font)[0],
-                 self._measure(draw, subtitle, font)[0]) + 8
+        x += self._measure(draw, title, font)[0] + 8
         return x - start
 
     def _draw_divider(self, img, draw, x: int) -> int:
@@ -743,16 +774,27 @@ class StripRenderer:
             count = f"{situation.get('balls', 0)}-{situation.get('strikes', 0)}"
             draw.text((x, top), self._safe(count), font=font, fill=self.LABEL)
             cw = self._measure(draw, count, font)[0]
-            draw.text((x, top + row_h + 1), "OUT", font=font, fill=self.DIM)
-            ow = self._measure(draw, "OUT", font)[0]
+            draw.text((x, top + row_h + 1), "Out", font=font, fill=self.DIM)
+            ow = self._measure(draw, "Out", font)[0]
             self._draw_outs(draw, x + ow + 3, top + row_h + 3,
                             situation.get("outs", 0))
             x += max(cw, ow + 3 + 12) + 6
 
         elif kind == "football":
+            # Two-row block beside the crests, same stacking rule as
+            # baseball's count/outs: possession + down on the top row,
+            # yard line under them on the left edge. The yard line used
+            # to be drawn at the cursor *after* the down text without
+            # advancing the returned width for it -- confirmed on the Pi
+            # during DAL@SEA other-live: returned width undercounted by
+            # ~30px, so the next strip segment painted straight through
+            # "SEA 35". Width is the wider of the two rows, like the
+            # baseball branch above.
             down = situation.get("down_distance") or ""
             spot = situation.get("yard_line") or ""
             possession = situation.get("possession") or ""
+            col = x
+            row1 = col
             if possession:
                 # A ball marker beside the team with possession is the
                 # quickest read on a football board. Plain "*", not the
@@ -765,16 +807,22 @@ class StripRenderer:
                 # left indicating who has the ball. "*" survives _safe()
                 # (it's already ASCII) and still reads as a marker.
                 possession_text = self._safe(f"{possession} *")
-                draw.text((x, top), possession_text, font=font,
+                draw.text((row1, top), possession_text, font=font,
                           fill=self.LIVE if not situation.get("red_zone")
                           else (255, 80, 60))
-                x += self._measure(draw, possession_text, font)[0] + 5
+                row1 += self._measure(draw, possession_text, font)[0] + 5
             if down:
-                draw.text((x, top), self._safe(down), font=font, fill=self.LABEL)
-                x += self._measure(draw, down, font)[0] + 4
+                draw.text((row1, top), self._safe(down), font=font,
+                          fill=self.LABEL)
+                row1 += self._measure(draw, down, font)[0] + 4
+            row2 = col
             if spot:
-                draw.text((x, top + row_h + 1), self._safe(spot), font=font,
+                spot_text = self._safe(spot)
+                draw.text((col, top + row_h + 1), spot_text, font=font,
                           fill=self.DIM)
+                row2 += self._measure(draw, spot_text, font)[0]
+            if row1 > col or row2 > col:
+                x = max(row1, row2) + 6
 
         # Basketball carries nothing beyond the clock, which the status line
         # already shows, so it adds no segment of its own.
@@ -812,11 +860,11 @@ class StripRenderer:
             ours, theirs = away, home
 
         if state == "live":
-            status, colour = (game.get("status_detail") or "LIVE"), self.LIVE
+            status, colour = (game.get("status_detail") or "Live"), self.LIVE
         elif state == "final":
-            status, colour = "FINAL", self.FINAL
+            status, colour = "Final", self.FINAL
         else:
-            status, colour = (start_label or "NEXT"), self.UPCOMING
+            status, colour = (start_label or "Next"), self.UPCOMING
             channel = game.get("broadcast") or ""
             if channel:
                 # Appended rather than a separate row: the status label
@@ -828,10 +876,13 @@ class StripRenderer:
         # A configured rival takes over the status colour and label
         # regardless of state -- a rivalry final is still worth flagging,
         # not just a live one -- since the whole point is catching the eye
-        # before working out who is even playing.
-        rival_abbrs = {str(a).upper() for a in (rivals or []) if a}
-        if rival_abbrs and theirs.get("abbr", "").upper() in rival_abbrs:
-            status = f"RIVALRY {status}"
+        # before working out who is even playing. Expand aliases so a rival
+        # configured as ARI still matches ESPN's AZ (and NYK vs NY, etc.).
+        rival_abbrs = set()
+        for a in (rivals or []):
+            rival_abbrs |= abbr_group(str(a))
+        if rival_abbrs and abbr_group(theirs.get("abbr", "")) & rival_abbrs:
+            status = f"Rivalry {status}"
             colour = self.RIVALRY
 
         margin = self.MARGIN
@@ -871,7 +922,7 @@ class StripRenderer:
             crest_top += slack // 2
             score_below = False
 
-        draw.text((x, self._text_top(draw, status_font, status_y)),
+        draw.text((x, self._text_top(draw, status_font, status_y, sample=status)),
                   self._safe(status), font=status_font, fill=colour)
         block = self._measure(draw, status, status_font)[0]
 
@@ -1212,13 +1263,13 @@ class StripRenderer:
                 [cx - r + dx, cy - r, cx + r + dx, cy + r], fill=fill)
 
         shifts = {
-            "NEW MOON": 0, "WAXING CRESCENT": r * 0.6, "FIRST QUARTER": r,
-            "WAXING GIBBOUS": r * 1.5, "FULL MOON": r * 2.2,
-            "WANING GIBBOUS": r * 1.5, "LAST QUARTER": r,
-            "WANING CRESCENT": r * 0.6,
+            "New Moon": 0, "Waxing Crescent": r * 0.6, "First Quarter": r,
+            "Waxing Gibbous": r * 1.5, "Full Moon": r * 2.2,
+            "Waning Gibbous": r * 1.5, "Last Quarter": r,
+            "Waning Crescent": r * 0.6,
         }
         shift = shifts.get(name, r * 2.2)
-        direction = -1 if name.startswith("WANING") else 1
+        direction = -1 if name.startswith("Waning") else 1
 
         disc(0, lit)
         if shift < r * 2:
@@ -1233,29 +1284,26 @@ class StripRenderer:
                       font, row_h: int, when=None,
                       show_forecast: bool = True,
                       show_current: bool = True) -> int:
-        """Weather: now, the next few hours, then the next few days.
+        """Weather: now, then the next few hours.
 
         An active warning displaces the place name and takes the alert colour.
         A severe thunderstorm warning is the only thing on this board more
         urgent than a live score.
 
         show_forecast controls the hourly columns and the moon phase only
-        -- the 4-day forecast and current conditions always draw
-        regardless, current conditions on the same reasoning as the
-        warning above (whatever's happening right now outside stays
-        visible even while a live game hides everything else competing
-        for the strip), the 4-day forecast because it's brief enough not
-        to compete for the same space a live score needs. Off by default
-        from the caller's side (weather.hide_forecast_when_live in
-        config, opt-in per install) -- the original design kept the whole
-        block up during a live game on purpose, and this only overrides
-        that for whoever turns it on.
+        -- current conditions always draw regardless, on the same
+        reasoning as the warning above: whatever's happening right now
+        outside stays visible even while a live game hides everything
+        else competing for the strip. Off by default from the caller's
+        side (weather.hide_forecast_when_live in config, opt-in per
+        install) -- the original design kept the whole block up during a
+        live game on purpose, and this only overrides that for whoever
+        turns it on.
 
         The hourly column has its own separate cutoff on top of that,
         6am-8pm only, read from `when` -- unlike show_forecast this one is
         not configurable, since it is a fixed daily rhythm rather than a
-        per-install preference. The 4-day forecast and moon phase are not
-        affected by it.
+        per-install preference. The moon phase is not affected by it.
 
         show_current controls the icon and the plain current-temperature
         number specifically, not the whole "now" block -- feels-like is
@@ -1277,10 +1325,10 @@ class StripRenderer:
             head_colour = (255, 70, 60) if alerts[0].get("severity") in (
                 "Extreme", "Severe") else self.UPCOMING
         else:
-            head = weather.get("label") or "WEATHER"
+            head = weather.get("label") or "Weather"
             head_colour = self.UPCOMING
 
-        # --- now: icon, temperature, and what it feels like ---------------
+        # --- Now: Icon, Temperature, And What It Feels Like ---------------
         # show_current controls the icon and the plain current-temperature
         # number only: whenever the static panel is already showing that
         # same reading (nothing live pinned there), a second copy scrolling
@@ -1316,7 +1364,7 @@ class StripRenderer:
         slack = max(0, available - total_h)
         block_top = self.MARGIN + slack // 2
 
-        head_y = self._text_top(draw, font, block_top)
+        head_y = self._text_top(draw, font, block_top, sample=head)
         draw.text((x, head_y), self._safe(head), font=font, fill=head_colour)
         block = self._measure(draw, head, font)[0]
 
@@ -1342,14 +1390,15 @@ class StripRenderer:
                     # Written out in full -- this is a scrolling strip, not
                     # a fixed-width panel, so there is no space pressure
                     # forcing an abbreviation that a viewer has to decode.
-                    text = f"FEELS LIKE {feels}{unit}"
-                    draw.text((cursor, self._text_top(draw, font, text_top + row_h)),
+                    text = f"Feels Like {feels}{unit}"
+                    draw.text((cursor, self._text_top(draw, font, text_top + row_h,
+                                                       sample=text)),
                               self._safe(text), font=font, fill=self.DIM)
                     width = max(width, self._measure(draw, text, font)[0])
                 cursor += width + 6
             elif not show_current and feels is not None:
-                text = f"FEELS LIKE {feels}{unit}"
-                draw.text((cursor, self._text_top(draw, font, text_top)),
+                text = f"Feels Like {feels}{unit}"
+                draw.text((cursor, self._text_top(draw, font, text_top, sample=text)),
                           self._safe(text), font=font, fill=self.VALUE)
                 cursor += self._measure(draw, text, font)[0] + 6
 
@@ -1362,7 +1411,7 @@ class StripRenderer:
         # at once, which read as misaligned rather than header-over-content.
         forecast_content_top = self.MARGIN + row_h + 1
 
-        # --- next hours ---------------------------------------------------
+        # --- Next Hours ---------------------------------------------------
         # Shown 6am-8pm only. An hour-by-hour forecast is for deciding what
         # to do with the rest of today; overnight it's the 5-day forecast
         # that's still useful, not tonight's hourly, which by 8pm is mostly
@@ -1373,21 +1422,10 @@ class StripRenderer:
         if show_forecast and daytime and hourly:
             x += self._draw_divider(img, draw, x)
             x += self._draw_forecast_row(
-                img, draw, x, hourly[:5], "NEXT HOURS", font, row_h, unit,
+                img, draw, x, hourly[:5], "Next Hours", font, row_h, unit,
                 forecast_content_top)
 
-        # --- next days ----------------------------------------------------
-        # Not gated by show_forecast -- unlike the hourly column and the
-        # moon phase, this stays up through a live game too, per the same
-        # "brief enough not to compete" reasoning as current conditions.
-        daily = [d for d in (weather.get("daily") or []) if d.get("temp") is not None]
-        if daily:
-            x += self._draw_divider(img, draw, x)
-            x += self._draw_forecast_row(
-                img, draw, x, daily[:4], "4 DAY FORECAST", font, row_h, unit,
-                forecast_content_top)
-
-        # --- moon -----------------------------------------------------------
+        # --- Moon -----------------------------------------------------------
         if show_forecast and when is not None:
             x += self._draw_divider(img, draw, x)
             phase = moon_phase.phase_info(when)
@@ -1399,9 +1437,9 @@ class StripRenderer:
             moon_slack = max(0, moon_available - moon_total_h)
             moon_block_top = self.MARGIN + moon_slack // 2
 
-            header_y = self._text_top(draw, font, moon_block_top)
-            draw.text((x, header_y), "MOON", font=font, fill=self.DIM)
-            block = self._measure(draw, "MOON", font)[0]
+            header_y = self._text_top(draw, font, moon_block_top, sample="Moon")
+            draw.text((x, header_y), "Moon", font=font, fill=self.DIM)
+            block = self._measure(draw, "Moon", font)[0]
 
             moon_row_top = moon_block_top + row_h + 1
             icon_size = min(16, moon_content_h)
@@ -1413,11 +1451,13 @@ class StripRenderer:
             cursor += self._draw_moon_icon(
                 draw, cursor, icon_top, icon_size, phase["name"]) + 3
 
-            draw.text((cursor, self._text_top(draw, font, text_top)),
+            draw.text((cursor, self._text_top(draw, font, text_top,
+                                              sample=phase["name"])),
                       self._safe(phase["name"]), font=font, fill=self.VALUE)
             name_w = self._measure(draw, phase["name"], font)[0]
-            pct_text = f"{phase['illumination']}% LIT"
-            draw.text((cursor, self._text_top(draw, font, text_top + row_h)),
+            pct_text = f"{phase['illumination']}% Lit"
+            draw.text((cursor, self._text_top(draw, font, text_top + row_h,
+                                              sample=pct_text)),
                       self._safe(pct_text), font=font, fill=self.DIM)
             pct_w = self._measure(draw, pct_text, font)[0]
             cursor += max(name_w, pct_w) + 6
@@ -1477,18 +1517,21 @@ class StripRenderer:
         temp_y = self._text_bottom(draw, text_font, self.height - 1 - self.MARGIN)
         temp_ink_top = temp_y + draw.textbbox((0, 0), "0", font=text_font)[1]
 
-        # A 2px gap on each side of the icon was never actually affordable:
-        # against the real device's confirmed metrics (row_h=8, zero
-        # leading), label and temperature alone consume 16 of the 30px this
-        # column has to work with even when a strictly-smaller font *is*
-        # found, leaving only 3px for icon-plus-gaps and tripping the
-        # no-overlap floor below -- the exact silent-blank bug 0.19.2 meant
-        # to fix, still reachable whenever _smaller_font finds nothing. The
-        # rest of this file holds every segment to a 1px margin (MARGIN);
-        # this gap was the one place still spending 2px on each side purely
-        # as whitespace, and giving that back is what actually buys the icon
-        # room to draw on real hardware instead of only in this sandbox.
-        gap = 1
+        # A 2px gap on each side of the icon was never actually affordable
+        # in the worst case: whenever _smaller_font finds nothing and this
+        # falls back to the shared body font, label and temperature alone
+        # consume 16 of the 30px this column has to work with, leaving very
+        # little for icon-plus-gaps and tripping the no-overlap floor below
+        # -- the exact silent-blank bug 0.19.2 meant to fix. That worst
+        # case still needs gap=1 to keep the icon above the floor at all
+        # (confirmed on the Pi: gap=2 there drops it below the floor
+        # entirely). But whenever a strictly-smaller font *is* found --
+        # the common case -- there's enough room to afford gap=2 instead,
+        # buying real breathing room between label/icon/temp at a cost
+        # small enough the icon still reads as its own shape rather than a
+        # single blob (confirmed by rendering both and comparing, not
+        # assumed from the arithmetic alone).
+        gap = 2 if smaller else 1
         available = temp_ink_top - label_ink_bottom - gap * 2
         # Still a floor: a fallback to no icon at all remains correct if
         # some font combination is tighter still.
@@ -1517,29 +1560,42 @@ class StripRenderer:
     def _draw_forecast_row(self, img, draw, x: int, entries: List[Dict],
                            header: str, font, row_h: int, unit: str,
                            content_top: int) -> int:
-        """A section header ("NEXT HOURS", "4 DAY FORECAST") with its own
-        row of forecast columns beneath it, the columns centred under the
-        header rather than always starting flush with its left edge.
+        """A section header ("Next Hours") with its own row of forecast
+        columns beneath it, the columns centred under the header rather
+        than always starting flush with its left edge.
 
         The header and its columns rarely measure the same width -- a
-        short header over many columns, or a long one ("4 DAY FORECAST")
-        over few, however many actually came back for the day/hour window
-        -- and starting the columns flush-left under a wider header left
+        short header over many columns, or a long one over few, however
+        many actually came back for the hour window -- and starting the
+        columns flush-left under a wider header left
         them looking pinned to one side of their own label instead of
         belonging to it, the same slack-dumped-on-one-side mistake this
         file already fixes everywhere vertically. Measured with a
         measure-only pass over the same _draw_forecast_column this then
         draws for real, so the two can never disagree on a column's width.
+
+        The header itself draws in a font strictly smaller than the
+        columns beneath it -- it's a label for the row, not content with
+        equal billing, and the shared body font read as too heavy over a
+        short row of day/temp columns already using a smaller font of
+        their own. `content_top` (where the columns start) is untouched by
+        this -- it's still measured off the shared body font's own row_h,
+        so this alone doesn't buy the columns any extra room, on purpose:
+        changing that tradeoff is a separate decision from how big the
+        header reads.
         """
+        smaller_header = self._smaller_font(draw, row_h)
+        header_font = smaller_header[0] if smaller_header else font
         total_w = sum(
             self._draw_forecast_column(draw, 0, entry, font, row_h, unit,
                                        content_top=content_top,
                                        measure_only=True)
             for entry in entries
         )
-        header_w = self._measure(draw, header, font)[0]
-        draw.text((x, self._text_top(draw, font, self.MARGIN)),
-                  header, font=font, fill=self.DIM)
+        header_w = self._measure(draw, header, header_font)[0]
+        draw.text((x, self._text_top(draw, header_font, self.MARGIN,
+                                     sample=header)),
+                  header, font=header_font, fill=self.DIM)
         column = x + max(0, (header_w - total_w) // 2)
         for entry in entries:
             column += self._draw_forecast_column(
@@ -1619,22 +1675,22 @@ class StripRenderer:
         icon guessed from the name, beside a two-row block: the count on
         top, what it is counting down to below. Same shape as the
         notable-performer note, since both are "a fact, then what it is
-        about" -- the text needs no extra label of its own, since "62 DAYS
-        / TO CHRISTMAS" already says what it is.
+        about" -- the text needs no extra label of its own, since "62 Days
+        / To Christmas" already says what it is.
         """
         start = x
         if days <= 0:
-            big, label = "TODAY!", self._safe(name)
+            big, label = "Today!", self._safe(name)
         else:
-            big = f"{days} DAY" + ("S" if days != 1 else "")
-            label = f"TO {self._safe(name)}"
+            big = f"{days} Day" + ("s" if days != 1 else "")
+            label = f"To {self._safe(name)}"
 
         start_row = self._vblock_start(row_h, 2)
         icon_size = min(16, row_h * 2)
         icon_y = start_row + max(0, (row_h * 2 - icon_size) // 2)
         x += self._draw_countdown_icon(draw, x, icon_y, icon_size, name) + 3
 
-        top = self._text_top(draw, font, start_row)
+        top = self._text_top(draw, font, start_row, sample=big)
         draw.text((x, top), big, font=font, fill=self.VALUE)
         w1 = self._measure(draw, big, font)[0]
         draw.text((x, top + row_h), label, font=font, fill=self.DIM)
@@ -1692,13 +1748,13 @@ class StripRenderer:
         threw away readability for a saving that was never real.
         """
         start = x
-        label = "SEASON MVP"
+        label = "Season MVP"
         line_w = self._measure(draw, line, font)[0]
         short_w = self._measure(draw, short_name, font)[0]
         display_name = name if (name and line_w > short_w) else short_name
 
         start_row = self._vblock_start(row_h, 3)
-        label_y = self._text_top(draw, font, start_row)
+        label_y = self._text_top(draw, font, start_row, sample=label)
         draw.text((x, label_y), label, font=font, fill=self.DIM)
         name_y = self._text_top(draw, font, start_row + row_h)
         draw.text((x, name_y), self._safe(display_name), font=font,
@@ -1812,8 +1868,10 @@ class StripRenderer:
         return cursor - x
 
     @staticmethod
-    def _clock_text(now) -> str:
+    def _clock_text(now, military: bool = False) -> str:
         try:
+            if military:
+                return now.strftime("%H:%M")
             hour = now.strftime("%I").lstrip("0") or "12"
             return f"{hour}:{now.strftime('%M')}{now.strftime('%p')[0]}"
         except Exception:
@@ -1841,7 +1899,7 @@ class StripRenderer:
                     weather=None, clock=None, awards=None,
                     other_live=None, team_mvps=None, countdowns=None,
                     streaks=None, weather_show_forecast=True, show_clock=True,
-                    weather_show_current=True):
+                    weather_show_current=True, rivalry_live_boost=0):
         """One continuous strip across every team.
 
         A single image rather than one per team: the board then scrolls
@@ -1854,6 +1912,7 @@ class StripRenderer:
         """
         signature = (
             self.width, self.height,
+            int(rivalry_live_boost or 0),
             tuple(
                 (entry[0], tuple((r.get("rank"), r.get("short_name"), r.get("value"))
                                  for r in entry[1]))
@@ -1917,6 +1976,7 @@ class StripRenderer:
                 teams_and_games, start_labels, leaderboards, weather, clock,
                 awards, other_live, team_mvps, countdowns, streaks,
                 weather_show_forecast, show_clock, weather_show_current,
+                rivalry_live_boost,
             )
             self._strip_key = signature
             self._strip_cache = strip
@@ -1939,7 +1999,7 @@ class StripRenderer:
                 signature, teams_and_games, start_labels, leaderboards,
                 weather, clock, awards, other_live, team_mvps, countdowns,
                 streaks, weather_show_forecast, show_clock,
-                weather_show_current,
+                weather_show_current, rivalry_live_boost,
             )
         return self._strip_cache
 
@@ -1976,7 +2036,17 @@ class StripRenderer:
             args=(child_conn, self.width, self.height, allow_download),
             daemon=True, name="strip-compose-worker",
         )
-        self._compose_process.start()
+        # See _THIS_MODULE's own comment: start() pickles the target by
+        # reference synchronously, in this thread, before it returns -- the
+        # bare module name only needs to resolve for that one call.
+        already_present = sys.modules.get(__name__) is _THIS_MODULE
+        if not already_present:
+            sys.modules[__name__] = _THIS_MODULE
+        try:
+            self._compose_process.start()
+        finally:
+            if not already_present:
+                del sys.modules[__name__]
         # The child has its own copy (duplicated across fork); this
         # process only ever talks over self._compose_conn, the other end.
         child_conn.close()
@@ -1987,7 +2057,8 @@ class StripRenderer:
                                     countdowns, streaks,
                                     weather_show_forecast=True,
                                     show_clock=True,
-                                    weather_show_current=True) -> None:
+                                    weather_show_current=True,
+                                    rivalry_live_boost=0) -> None:
         """Compose the next strip off the render path, so the scroll
         never waits on it -- only the finished image, swapped in at
         adopt_pending()'s next seam, is ever shared back with the caller.
@@ -2031,6 +2102,7 @@ class StripRenderer:
                 teams_and_games, start_labels, leaderboards, weather, clock,
                 awards, other_live, team_mvps, countdowns, streaks,
                 weather_show_forecast, show_clock, weather_show_current,
+                rivalry_live_boost,
             )
 
             def _watch() -> None:
@@ -2081,6 +2153,7 @@ class StripRenderer:
                     teams_and_games, start_labels, leaderboards, weather,
                     clock, awards, other_live, team_mvps, countdowns, streaks,
                     weather_show_forecast, show_clock, weather_show_current,
+                    rivalry_live_boost,
                 )
             except Exception:
                 _fail("thread", exc_info=True)
@@ -2111,7 +2184,8 @@ class StripRenderer:
                        countdowns, streaks,
                        weather_show_forecast: bool = True,
                        show_clock: bool = True,
-                       weather_show_current: bool = True):
+                       weather_show_current: bool = True,
+                       rivalry_live_boost: int = 0):
         """The actual drawing work -- tens of milliseconds, hundreds on a
         Pi. Safe to run off the main thread: everything it touches is
         either local to this call (the scratch canvas, its font) or the
@@ -2197,17 +2271,35 @@ class StripRenderer:
             x += self._draw_banner(scratch, draw, x, team, font, row_h, streak)
             x += self._draw_divider(scratch, draw, x)
             rivals = team.get("rivals") or []
+            rival_abbrs = set()
+            for a in rivals:
+                rival_abbrs |= abbr_group(str(a))
             for game in sorted(games, key=lambda g: order.get(g.get("state"), 3)):
-                x += self._draw_game(
-                    scratch, draw, x, game, font, row_h,
-                    start_labels.get(game.get("id"), ""),
-                    performer=ESPNGamesSource.pick_performer(
-                        game, team.get("abbr", "")
-                    ),
-                    focus_abbr=team.get("abbr", ""),
-                    rivals=rivals,
-                )
-                x += self._draw_divider(scratch, draw, x)
+                repeats = 1
+                if (rivalry_live_boost and game.get("state") == "live"
+                        and rival_abbrs):
+                    wanted = abbr_group(team.get("abbr", ""))
+                    home = (game.get("home") or {}).get("abbr", "")
+                    away = (game.get("away") or {}).get("abbr", "")
+                    if home.upper() in wanted:
+                        theirs = away
+                    elif away.upper() in wanted:
+                        theirs = home
+                    else:
+                        theirs = away
+                    if abbr_group(theirs) & rival_abbrs:
+                        repeats = 1 + int(rivalry_live_boost)
+                for _ in range(repeats):
+                    x += self._draw_game(
+                        scratch, draw, x, game, font, row_h,
+                        start_labels.get(game.get("id"), ""),
+                        performer=ESPNGamesSource.pick_performer(
+                            game, team.get("abbr", "")
+                        ),
+                        focus_abbr=team.get("abbr", ""),
+                        rivals=rivals,
+                    )
+                    x += self._draw_divider(scratch, draw, x)
 
             # The team's own season standout, right after its games -- a
             # fact about their season belongs closer to the scores than
@@ -2259,7 +2351,7 @@ class StripRenderer:
         drawable = [entry for entry in (leaderboards or []) if entry[1]]
         if drawable:
             x += self._draw_section(scratch, draw, x, "mlb", "MLB",
-                                    "SEASON LEADERS", font, row_h)
+                                    "Season Leaders", font, row_h)
             x += self._draw_divider(scratch, draw, x)
 
         for entry in drawable:
@@ -2403,15 +2495,16 @@ class StripRenderer:
             situation = game.get("situation") or {}
             kind = situation.get("kind")
 
-            def row_y(i):
-                return self._text_top(draw, font, self.MARGIN + row_h * i)
+            def row_y(i, sample="0"):
+                return self._text_top(draw, font, self.MARGIN + row_h * i,
+                                      sample=sample)
 
             # Row 0: where the game is.
-            status = self._safe(game.get("status_detail") or "LIVE")
+            status = self._safe(game.get("status_detail") or "Live")
             if kind in ("football", "basketball") and situation.get("clock"):
                 status = self._safe(
                     f"Q{game.get('period', '')} {situation['clock']}".strip())
-            draw.text((1, row_y(0)), status, font=font, fill=self.LIVE)
+            draw.text((1, row_y(0, sample=status)), status, font=font, fill=self.LIVE)
 
             # Rows 1 and 2: crest, abbreviation, score right-aligned.
             #
@@ -2568,7 +2661,7 @@ class StripRenderer:
             probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
             font, row_h = self._fit_font(probe, 4, self.height)
 
-            clock_text = self._safe(self._clock_text(now))
+            clock_text = self._safe(self._clock_text(now, military=True))
             try:
                 date_text = self._safe(
                     f"{now.strftime('%a').upper()} {now.month}/{now.day}")

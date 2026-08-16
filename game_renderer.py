@@ -13,10 +13,10 @@ because they were arrived at the hard way on this exact hardware:
 
 A card is four rows on a 32px panel:
 
-    NYY @ BOS            FINAL      <- matchup and status
+    NYY @ BOS            Final      <- matchup and status
     NYY  7                          <- away, score
     BOS  4                          <- home, score
-    A.JUDGE 2-4 HR 3RBI             <- notable performer
+    A.Judge 2-4 HR 3RBI             <- notable performer
 """
 
 import logging
@@ -288,7 +288,7 @@ class GameCardRenderer:
         return share + leftover // 2, row_h + share
 
     # ------------------------------------------------------------------
-    # The card
+    # The Card
     # ------------------------------------------------------------------
     def draw_game(self, game: Dict) -> bool:
         """Draw one game card. Returns False if there is nothing to draw."""
@@ -366,7 +366,7 @@ class GameCardRenderer:
             status = self._live_status(game)
             colour = self.profile.live_color
         elif state == "final":
-            status = "FINAL"
+            status = "Final"
             colour = self.profile.final_color
         else:
             status = game.get("start_label") or ""
@@ -390,11 +390,11 @@ class GameCardRenderer:
         clock = (game.get("clock") or "").strip()
         if game.get("league") == "mlb":
             # Baseball has no clock; the inning is the whole story.
-            return detail or "LIVE"
+            return detail or "Live"
         period = game.get("period") or 0
         if period and clock:
             return f"Q{period} {clock}"
-        return detail or "LIVE"
+        return detail or "Live"
 
     def _draw_team_row(self, img, draw, side: Dict, logo, logo_w: int, font,
                        left: int, y: int, row_h: int, state: str,

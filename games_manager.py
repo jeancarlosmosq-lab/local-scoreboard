@@ -180,7 +180,6 @@ class GamesManager:
             last = self._next_game_checked.get(league, 0.0)
             if now - last < self._next_game_interval:
                 continue
-            self._next_game_checked[league] = now
             try:
                 games = self.source.fetch_scoreboard(
                     league, days_back=0, days_forward=120
@@ -188,6 +187,13 @@ class GamesManager:
             except Exception as e:
                 self.logger.debug("Far-future lookup failed for %s: %s", league, e)
                 continue
+            # Only stamp after a real response. None means the request failed
+            # -- throttling that for 24h left an off-season followed team
+            # missing after a single blip. An empty list is a successful
+            # "nothing in the window" and should still throttle.
+            if games is None:
+                continue
+            self._next_game_checked[league] = now
             upcoming = sorted(
                 (g for g in games if self._is_followed(g, index)
                  and g.get("state") == STATE_UPCOMING),
@@ -350,9 +356,19 @@ class GamesManager:
         index = self._team_index()
         collected: List[Dict] = []
         other_live: List[Dict] = []
+        failed_leagues = set()
 
         for league in LEAGUES:
             games = self.source.fetch_scoreboard(league)
+            # None = request failed. Keep that league's previous rows rather
+            # than treating failure as "no games" and wiping good data when
+            # another league still returns fine.
+            if games is None:
+                failed_leagues.add(league)
+                self.logger.warning(
+                    "%s scoreboard fetch failed; keeping previous games", league
+                )
+                continue
             followed = [g for g in games if self._is_followed(g, index)]
             collected.extend(followed)
 
@@ -366,6 +382,18 @@ class GamesManager:
                 "%s: %d games, %d involve a followed team, %d other live",
                 league, len(games), len(followed), len(unfollowed_live),
             )
+
+        if failed_leagues:
+            kept_ids = {g.get("id") for g in collected}
+            for g in self._games:
+                if g.get("league") in failed_leagues and g.get("id") not in kept_ids:
+                    collected.append(g)
+                    kept_ids.add(g.get("id"))
+            other_ids = {g.get("id") for g in other_live}
+            for g in self._other_live:
+                if g.get("league") in failed_leagues and g.get("id") not in other_ids:
+                    other_live.append(g)
+                    other_ids.add(g.get("id"))
 
         if not collected and not other_live:
             # Keep whatever we had rather than blanking the board on a
@@ -514,7 +542,14 @@ class GamesManager:
                 self._streaks.update(found)
 
     def streak_for(self, team: Dict) -> str:
-        return self._streaks.get(team.get("abbr", "").upper(), "")
+        # Standings keys use ESPN's spelling; config may use an alias
+        # (ARI vs AZ). Match through the same group table as followed-team
+        # detection so a streak does not silently vanish.
+        for spelling in abbr_group(team.get("abbr", "")):
+            value = self._streaks.get(spelling, "")
+            if value:
+                return value
+        return ""
 
     @staticmethod
     def _sort_key(game: Dict):
@@ -592,7 +627,9 @@ class GamesManager:
     def has_data(self) -> bool:
         return bool(self._games)
 
-    def other_live_games(self, limit: Optional[int] = None) -> List[Dict]:
+    def other_live_games(self, limit: Optional[int] = None,
+                         followed_leagues_only: bool = False,
+                         per_league_limit: int = 0) -> List[Dict]:
         """Live games around the league that do not involve a followed team.
 
         Deliberately live-only, not the full schedule: this exists to answer
@@ -600,4 +637,17 @@ class GamesManager:
         you do not follow is not something this board should spend space on.
         """
         games = [g for g in self._other_live if g.get("state") == STATE_LIVE]
+        if followed_leagues_only:
+            leagues = {t.get("league") for t in self.teams if t.get("league")}
+            games = [g for g in games if g.get("league") in leagues]
+        if per_league_limit and per_league_limit > 0:
+            kept: List[Dict] = []
+            counts: Dict[str, int] = {}
+            for g in games:
+                league = g.get("league") or ""
+                if counts.get(league, 0) >= per_league_limit:
+                    continue
+                counts[league] = counts.get(league, 0) + 1
+                kept.append(g)
+            games = kept
         return games[:limit] if limit else games

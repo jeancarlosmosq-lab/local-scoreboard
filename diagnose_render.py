@@ -106,29 +106,27 @@ def main():
 
     rows = [{"rank": i, "short_name": f"P.{i}", "team": "NYY", "value": "41"}
            for i in range(1, 4)]
-    lb_strip = new_renderer().build_strip([], leaderboards=[("AL HR LEADERS", rows, "HR")])
+    lb_strip = new_renderer().build_strip([], leaderboards=[("AL HR Leaders", rows, "HR")])
     measure_strip("leaderboard", lb_strip)
 
     award_rows = [{"rank": i, "short_name": f"P.{i}", "team": "NYY"}
                  for i in range(1, 4)]
-    aw_strip = new_renderer().build_strip([], awards=[("AL MVP WATCH", award_rows)])
+    aw_strip = new_renderer().build_strip([], awards=[("AL MVP", award_rows)])
     measure_strip("awards", aw_strip)
 
     from datetime import datetime
     clock_strip = new_renderer().build_strip([], clock=datetime.now())
     measure_strip("clock", clock_strip)
 
-    weather = {"label": "BAYONNE", "units": "F", "now_temp": 78,
+    weather = {"label": "Bayonne", "units": "F", "now_temp": 78,
               "now_feels": 85, "now_condition": "CLEAR", "alerts": [],
               "hourly": [{"name": "8P", "temp": 77, "condition": "Clear"},
-                        {"name": "9P", "temp": 75, "condition": "Rain"}],
-              "daily": [{"name": "MON", "temp": 80, "condition": "Sunny"},
-                       {"name": "TUE", "temp": 78, "condition": "Storm"}]}
+                        {"name": "9P", "temp": 75, "condition": "Rain"}]}
     weather_strip = new_renderer().build_strip([], weather=weather)
     measure_strip("weather", weather_strip)
 
     # The overall weather margin check above does not, on its own, prove
-    # the hourly/daily forecast icons actually drew anything -- the rest of
+    # the hourly forecast icons actually drew anything -- the rest of
     # the segment can still hit the right top/bottom rows even if those
     # specific icons are blank. Render one forecast column in isolation and
     # count its own lit pixels directly.

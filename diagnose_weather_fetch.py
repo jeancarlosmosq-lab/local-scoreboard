@@ -3,13 +3,13 @@
 Run the plugin's own weather_source.py against live data and print exactly
 what it returns.
 
-diagnose_weather.py already confirmed the raw NWS API has real hourly and
-daily data for this point. This script goes one step further: it imports
-the actual NWSWeather class the plugin uses -- not a reimplementation of the
-request logic -- and calls fetch() on it directly, the same way manager.py
-does. If hourly/daily come back empty here, the bug is in this file's
-parsing. If they come back populated here but the panel still doesn't show
-them, the bug is downstream in manager.py or strip_renderer.py instead.
+diagnose_weather.py already confirmed the raw NWS API has real hourly data
+for this point. This script goes one step further: it imports the actual
+NWSWeather class the plugin uses -- not a reimplementation of the request
+logic -- and calls fetch() on it directly, the same way manager.py does.
+If hourly comes back empty here, the bug is in this file's parsing. If it
+comes back populated here but the panel still doesn't show it, the bug is
+downstream in manager.py or strip_renderer.py instead.
 
 Run from the plugin's own folder on the Pi, so the import can find it:
 
@@ -58,18 +58,16 @@ def main():
     print(f"  label         : {result.get('label')!r}")
     print(f"  now_temp      : {result.get('now_temp')!r}")
     print(f"  now_condition : {result.get('now_condition')!r}")
-    print(f"  daily entries : {len(result.get('daily') or [])}")
     print(f"  hourly entries: {len(result.get('hourly') or [])}")
 
     if not result:
         print("\n  fetch() returned an EMPTY dict -- _resolve_grid() likely")
         print("  failed. Check for a 'Weather request failed' line above,")
         print("  logged at DEBUG level by the failing request.")
-    elif not result.get("daily") and not result.get("hourly"):
-        print("\n  daily and hourly are BOTH empty despite fetch() succeeding")
-        print("  overall -- this points at _condense_daily() or")
-        print("  _fetch_hourly() specifically, not the network layer.")
-        print("  Check the DEBUG lines above for either method logging a")
+    elif not result.get("hourly"):
+        print("\n  hourly is empty despite fetch() succeeding overall -- this")
+        print("  points at _fetch_hourly() specifically, not the network")
+        print("  layer. Check the DEBUG lines above for it logging a")
         print("  request failure.")
 
     print("\nPaste this whole output back.")

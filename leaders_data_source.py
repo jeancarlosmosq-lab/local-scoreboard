@@ -21,6 +21,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from espn_data_source import abbr_group
+
 
 # Category keys are MLB StatsAPI's own names. The label is what gets drawn on
 # the LED panel, so it is kept short -- a 128px panel has room for very little.
@@ -169,10 +171,12 @@ class MLBStatsLeadersSource:
         }
 
     def _load_teams(self) -> None:
+        # Only treat a successful load as done. Setting {} before the HTTP
+        # call used to mark the cache "loaded" on failure, so a transient
+        # blip left every leader row's team blank for the rest of the
+        # process -- no retry, ever.
         if self._team_abbrs is not None:
             return
-        self._team_abbrs = {}
-        self._team_ids = {}
         try:
             response = self.session.get(
                 f"{self.BASE_URL}/teams",
@@ -180,11 +184,15 @@ class MLBStatsLeadersSource:
                 headers=self.get_headers(), timeout=15,
             )
             response.raise_for_status()
+            abbrs: Dict[int, str] = {}
+            ids: Dict[str, int] = {}
             for team in response.json().get("teams", []) or []:
                 tid, abbr = team.get("id"), team.get("abbreviation")
                 if tid and abbr:
-                    self._team_abbrs[tid] = abbr
-                    self._team_ids[abbr] = tid
+                    abbrs[tid] = abbr
+                    ids[abbr] = tid
+            self._team_abbrs = abbrs
+            self._team_ids = ids
         except Exception as e:
             self.logger.debug("Could not fetch team abbreviations: %s", e)
 
@@ -193,14 +201,27 @@ class MLBStatsLeadersSource:
         if not team_id:
             return ""
         self._load_teams()
+        if not self._team_abbrs:
+            return ""
         return self._team_abbrs.get(team_id, "")
 
     def _team_id(self, abbr: str) -> Optional[int]:
-        """Resolve a team abbreviation to its StatsAPI id, e.g. "NYY" -> 147."""
+        """Resolve a team abbreviation to its StatsAPI id, e.g. "NYY" -> 147.
+
+        Config/ESPN spellings (ARI, CHW) and StatsAPI spellings (AZ, CWS)
+        are matched through the shared alias table so roster MVP lookups
+        do not silently miss for those clubs.
+        """
         if not abbr:
             return None
         self._load_teams()
-        return self._team_ids.get(abbr.upper())
+        if not self._team_ids:
+            return None
+        for spelling in abbr_group(abbr):
+            tid = self._team_ids.get(spelling)
+            if tid:
+                return tid
+        return None
 
     def fetch_team_roster(self, team_abbr: str) -> List[Dict]:
         """One team's active roster: [{"player_id", "name", "short_name"}].

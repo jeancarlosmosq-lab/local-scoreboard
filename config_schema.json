@@ -23,7 +23,7 @@
           "type": "string",
           "title": "Place Name",
           "description": "Shown above the temperature. Left empty, the nearest city name from the forecast office is used.",
-          "default": "BAYONNE"
+          "default": "Bayonne"
         },
         "latitude": {
           "type": "number",
@@ -62,7 +62,7 @@
     "other_live_games": {
       "type": "object",
       "title": "Other Live Games",
-      "description": "Live games elsewhere -- across MLB, NBA and NFL -- that do not involve a followed team. Shown only while they are actually live; a final or a fixture for an unfollowed team never appears here.",
+      "description": "Live games elsewhere that do not involve a followed team. Shown only while they are actually live; a final or a fixture for an unfollowed team never appears here.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -72,9 +72,24 @@
         "limit": {
           "type": "integer",
           "title": "Maximum Games Shown",
+          "description": "Hard cap across every league after filtering. On a busy NFL Sunday, lower this if the strip feels crowded.",
           "default": 5,
           "minimum": 1,
           "maximum": 15
+        },
+        "followed_leagues_only": {
+          "type": "boolean",
+          "title": "Only Leagues You Follow",
+          "description": "When on, other-live games are limited to leagues that appear in your teams list (e.g. following only MLB+NBA skips NFL elsewhere). Off shows every league.",
+          "default": false
+        },
+        "per_league_limit": {
+          "type": "integer",
+          "title": "Max Per League",
+          "description": "0 means no per-league cap (only the overall maximum applies). Set to 1–3 to keep one sport from dominating the scroll on a busy day.",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 10
         }
       }
     },
@@ -143,6 +158,24 @@
       "default": 22,
       "minimum": 4,
       "maximum": 120
+    },
+    "rivalry_live_boost": {
+      "type": "integer",
+      "title": "Rivalry Live Extra Passes",
+      "description": "Strip layout only. When a followed team is live against a configured rival, that game is drawn this many extra times in the scroll so it comes around more often (0 = no boost, 1 = shown twice per team pass).",
+      "default": 1,
+      "minimum": 0,
+      "maximum": 3,
+      "x-advanced": true
+    },
+    "rivalry_scroll_factor": {
+      "type": "number",
+      "title": "Rivalry Live Scroll Factor",
+      "description": "Strip layout only. While any followed rivalry game is live, multiply scroll speed by this factor (0.6 = 40% slower). 1 leaves speed unchanged.",
+      "default": 0.7,
+      "minimum": 0.3,
+      "maximum": 1,
+      "x-advanced": true
     },
     "static_panel": {
       "type": "object",

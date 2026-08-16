@@ -78,6 +78,22 @@ plugin's own refresh logic is at fault; the plugin's own gates can be
 completely correct while a framework-level scheduling default overrides them
 invisibly.
 
+A related framework mechanic worth knowing alongside this one: the host
+holds a per-plugin lock for the *entire duration* of an `update()` call,
+and skips that plugin's `display()` entirely while it's held — the panel
+just shows its last pushed frame rather than a new one
+(`display_controller.py`'s `_display_lock_or_skip`, a non-blocking
+try-lock). That's invisible as long as `update()` is fast, but `update()`
+doing real, synchronous network I/O turns straight into a visible freeze
+for however long the fetch takes, every time it runs. Confirmed on a busy
+live-game day: `games.refresh()` alone took ~1s per call, every single
+`live_interval` (5s) — the panel was frozen roughly a fifth of every five
+seconds. See "Backgrounding `update()`'s Data Fetch" below for the fix;
+the lesson that generalizes is the same shape as `update_interval` above —
+a framework-level scheduling/locking behavior that no amount of correct
+plugin-side logic can compensate for, only work around by not giving the
+framework a slow call to lock around in the first place.
+
 ## The Third Most Important Thing: Composing A Rebuilt Strip Runs In Its Own Process
 
 `strip_renderer.py`'s background rebuild (`_dispatch_background_build`)
@@ -100,7 +116,7 @@ routes composition to a persistent worker process (`_compose_worker_main`
 in `strip_renderer.py`) over a `multiprocessing.Pipe`, kept alive for the
 life of the service rather than spawned per rebuild.
 
-Three gotchas hit building this, all now handled but worth knowing if
+Four gotchas hit building this, all now handled but worth knowing if
 this code needs touching again:
 
 - **`Pipe`, not `Queue`.** `Queue.put()` defers pickling to its own
@@ -134,6 +150,37 @@ this code needs touching again:
   an equivalent font itself via its own `_largest_fit` call, which is
   deterministic given the same panel height, so it always picks the same
   font file, just loaded fresh in its own process.
+- **The host framework's own plugin isolation breaks pickling a top-level
+  function by reference, silently, until a background rebuild actually
+  runs.** LEDMatrix's plugin loader renames this module's `sys.modules`
+  entry from the bare `strip_renderer` to a namespaced key
+  (`_plg_local-scoreboard_strip_renderer`) immediately after loading it —
+  correct on the framework's part, so two different plugins that both
+  ship a same-named file don't collide — but `multiprocessing`'s `spawn`
+  start method pickles a `Process(target=...)` by `(module_name,
+  qualname)` and verifies that against `sys.modules[module_name]` at
+  pickle time, which fails once the bare key is gone:
+  `PicklingError: Can't pickle <function _compose_worker_main ...>: it's
+  not the same object as strip_renderer._compose_worker_main`. This
+  shipped undetected for a full version, because confirming a clean
+  deploy only ever checked `journalctl` for a "Loaded plugin" line
+  moments after restart — the pickling only happens on the *first
+  background dispatch*, which can be a full `update_interval` or more
+  later. Checking a clean load is not the same as checking the
+  background path actually ran; watch `journalctl` for at least a
+  couple of minutes past the load line, not just the load line itself.
+  Fixed in `_ensure_compose_process`: a module-level `_THIS_MODULE =
+  sys.modules[__name__]`, captured at import time before the framework
+  renames the entry, gets briefly restored under the bare name around
+  the `Process.start()` call (which pickles synchronously, in the
+  calling thread, before it returns) and removed again right after, so
+  the framework's own isolation still holds the rest of the time. An
+  old, pre-rename `nyc-teams` plugin folder with its own stale copy of
+  this file was also found still on the Pi during this investigation —
+  not the actual cause of this specific bug, but a real `sys.path`
+  collision risk in its own right, and removed per the note in
+  Deployment below that doing so is safe once a new deploy is confirmed
+  working.
 
 `use_process` defaults to `False` — every `StripRenderer` in
 `test_offline.py` uses the original thread path unchanged, since spawning
@@ -141,16 +188,93 @@ a real OS process per test instance would make the suite far slower for
 no benefit (nothing there is racing real matrix output for CPU). Only
 `manager.py`'s actual on-device instance opts in.
 
+## Backgrounding `update()`'s Data Fetch
+
+A second, distinct performance fix from the strip-composing one above,
+found the same way: a user report of the panel visibly freezing, then
+root-caused on the Pi rather than guessed at. Different mechanism, so it
+needed a different fix.
+
+`manager.py`'s `update()` used to fetch everything — followed teams'
+games, other-live games league-wide, their leaders, streaks, season
+leaders, weather — inline, synchronously. That is genuine network I/O.
+The host framework holds a per-plugin lock for the whole duration of a
+plugin's `update()` call and skips that plugin's `display()` entirely
+while it's held (see the note under "Manifest `update_interval` Gates
+Everything" above) — so a slow `update()` is a frozen panel, not just
+stale data. Confirmed directly against the Pi on a day with several live
+games at once: `games.refresh()` alone took ~1 second, every single
+`live_interval` (5s) — the panel was frozen for roughly a fifth of every
+five seconds, worse the more games were live.
+
+`update()` now dispatches its whole body of work to a background thread
+(`_dispatch_background_update`) and returns in under 1ms regardless of
+how long the fetch actually takes — confirmed by direct measurement
+against the same live workload, before and after. A few things worth
+knowing if this needs touching again:
+
+- **A thread is enough here — not a separate process.** This looks like
+  the same problem `use_process` above solved, but it isn't: that fix
+  was working around GIL contention from real CPU-bound drawing work
+  competing with the render thread. A network call *releases* the GIL
+  while it's waiting on the socket, so a background thread costs the
+  render loop nothing here. Reaching for multiprocessing again for this
+  would add all of `_compose_worker_main`'s complexity (spawn vs fork,
+  Pipe vs Queue, objects that can't cross the process boundary) for a
+  problem threading already solves cleanly.
+- **Single-flight, guarded by `_refresh_lock`/`_refresh_in_flight`.**
+  `update()`'s own gate (`idle_interval`/`live_interval`) already limits
+  how often a dispatch is attempted, but a slow network day could still
+  have one dispatch still running when the next would-be one arrives.
+  Starting a second, overlapping fetch would only add more concurrent
+  network load, not fix anything — the guard makes a second `update()`
+  call during an in-flight refresh a harmless no-op instead.
+- **`GamesManager.refresh()` itself stays fully synchronous, deliberately
+  unchanged.** Every test in `test_offline.py` that calls `games.refresh()`
+  directly depends on it being finished by the time the call returns —
+  making it asynchronous by default would have broken that contract for
+  everything that already worked. The background dispatch wraps the call
+  from `manager.py`'s side instead, the same relationship
+  `_dispatch_background_build` has to `_compose_strip` in
+  `strip_renderer.py` — the callee stays simple and synchronous, the
+  caller decides whether to background it.
+- **Tests that call `update()` and immediately check what it did now need
+  `_wait_for_background_update()` first** (mirroring
+  `StripRenderer._wait_for_background_build`), or they race the
+  background thread and become flaky. A dedicated test also forces a
+  slow fake `refresh()` (via a small delay and `threading.Event`s) to
+  prove `update()` itself returns near-instantly regardless of how long
+  the underlying fetch takes, and that a second `update()` mid-fetch
+  doesn't dispatch an overlapping one.
+
 ## Text Positioning: Always Use `_text_top` / `_text_bottom` / `_vblock_start`
 
 Never call `draw.text((x, N), ...)` with a bare row number. This font
 family's leading means a glyph drawn "at row 1" doesn't put ink at row 1.
 Use:
 
-- `_text_top(draw, font, target_row)` — returns the y to pass to `draw.text`
-  so ink starts at `target_row`.
-- `_text_bottom(draw, font, target_bottom_row)` — same, for ink that should
-  *end* at a given row.
+- `_text_top(draw, font, target_row, sample="0")` — returns the y to pass to
+  `draw.text` so ink starts at `target_row`.
+- `_text_bottom(draw, font, target_bottom_row, sample="0")` — same, for ink
+  that should *end* at a given row.
+- **Pass `sample=` as the actual text being positioned whenever that text
+  might not be all-caps or numeric.** Both helpers compensate for this
+  font's leading by measuring a stand-in glyph's own bounding box — `sample`
+  defaults to a digit because nearly everything on this strip used to be
+  all-caps or numeric, and a digit's ink-top lines up with a cap letter's
+  in this font. That default silently stops being safe the moment the text
+  being positioned has a lowercase ascender or dot: it can sit a pixel
+  above where a digit's own ink starts, which is invisible everywhere
+  except right at a block's own top edge. Confirmed the hard way: switching
+  status labels from `"FINAL"` to `"Final"` shipped a real, reproducible
+  1px top-margin violation, caught immediately by the existing "final game:
+  margins top/bottom" test, isolated by reverting just that one string back
+  to see the test pass again. Every other call site that positions literal,
+  code-authored text (section titles, status labels, forecast headers) now
+  passes its own text as `sample`; call sites positioning data-driven
+  content (player names, team abbreviations) were left on the digit
+  default, since auditing every data-driven string was out of scope for
+  the change that found this.
 - `_vblock_start(row_h, num_rows)` — returns the target row for the first of
   several stacked rows, **centred** within the panel height, splitting real
   slack evenly. Every stacked-text segment (leaderboard, awards, note,

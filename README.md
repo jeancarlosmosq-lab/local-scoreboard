@@ -15,8 +15,8 @@ This replaces both `baseball-scoreboard` and `baseball-stats` — disable them o
 The default layout. Every team lives on **one continuous strip** that scrolls past the panel and wraps, so the board never stops or blanks between teams.
 
 ```
-[LOGO] YANKEES W3 │ FINAL      │ HR                     │ MON 7:05
-                  │ (l) BOS 4  │ A.JUDGE 2-4, HR, 3 RBI │ (l) NYY 70-46
+[LOGO] YANKEES W3 │ Final      │ HR                     │ MON 7:05
+                  │ (l) BOS 4  │ A.Judge 2-4, HR, 3 RBI │ (l) NYY 70-46
                   │ (l) NYY 7  │                        │ (l) TB  55-61
 ```
 
@@ -30,19 +30,19 @@ Status is colour-coded — green in progress, amber upcoming, grey final, orange
 
 ## Weather, Moon Phase And Countdowns
 
-Ahead of the teams: current conditions and an hourly and 4-day forecast from the US National Weather Service (free, keyless), a clock, the moon's current phase, and days-until for any personal dates you configure — a birthday, a holiday, first day of school. Each countdown gets an icon guessed from its own name (a cake for a birthday, a tree for Christmas, a pencil for school, a star otherwise), and reads "TODAY!" on the day itself.
+Ahead of the teams: current conditions and an hourly forecast from the US National Weather Service (free, keyless), a clock, the moon's current phase, and days-until for any personal dates you configure — a birthday, a holiday, first day of school. Each countdown gets an icon guessed from its own name (a cake for a birthday, a tree for Christmas, a pencil for school, a star otherwise), and reads "Today!" on the day itself.
 
 A live game — any live game, not just a followed team's — hides the season leaderboards, award watch lists and countdowns entirely, since a live score is what the board exists to show right now and everything else competing for the same scroll only pushes it further away. They come back automatically the moment nothing is live; the underlying data keeps refreshing in the background the whole time, so there's no delay when they reappear. This takes effect immediately, not on the strip's next full lap -- a live game starting or ending forces the newly rebuilt strip in right away rather than waiting for the scroll to finish its current pass, which on a long strip could otherwise be minutes away.
 
-Current conditions and the 4-day forecast stay up regardless of a live game -- the same reasoning that leads the whole strip with weather in the first place, a warning is more urgent than a live score, and a short outlook is brief enough not to compete for the same space. The moon phase and hourly forecast column follow the same hiding rule as leaderboards, but only if `weather.hide_forecast_when_live` is turned on; it defaults to off, so installs that don't set it keep the original always-shown behaviour.
+Current conditions stay up regardless of a live game -- the same reasoning that leads the whole strip with weather in the first place, a warning is more urgent than a live score. The moon phase and hourly forecast column follow the same hiding rule as leaderboards, but only if `weather.hide_forecast_when_live` is turned on; it defaults to off, so installs that don't set it keep the original always-shown behaviour.
 
-The hourly forecast has its own separate cutoff on top of that, always on: shown 6am-8pm, hidden overnight. An hour-by-hour forecast is for deciding what to do with the rest of today; by 8pm it's mostly covering hours you'll be asleep for. The 4-day forecast always stays up regardless of the time of day; the moon phase does not, unless weather.hide_forecast_when_live is off.
+The hourly forecast has its own separate cutoff on top of that, always on: shown 6am-8pm, hidden overnight. An hour-by-hour forecast is for deciding what to do with the rest of today; by 8pm it's mostly covering hours you'll be asleep for.
 
-Both the hourly and 4-day columns centre under their own section header rather than always starting flush with its left edge -- a header wider than the day/hour window that actually came back otherwise left the columns looking pinned to one side of their own label.
+The hourly column centres under its own section header rather than always starting flush with its left edge -- a header wider than the hour window that actually came back otherwise left the column looking pinned to one side of its own label.
 
 Current conditions (the icon and plain temperature) hide from the scroll whenever the static panel is already showing that same reading -- nothing live, so the clock/weather fallback has that slot -- the same duplicate-avoidance as the scroll's own clock. Feels-like isn't shown on the static panel at all, so it stays up in the scroll regardless, using the icon and single-line treatment the temperature would otherwise get rather than sitting paired under a hidden number.
 
-When nothing is live, the leftmost module shows this same clock-and-weather block on its own, pinned in place while the rest of the strip scrolls past — the same slot a live game takes over automatically the moment there is one. The scroll carries its own copy of the clock only while that slot has been taken over by a live game -- otherwise the static panel is already showing the time, and a second copy scrolling past would just be the same clock twice.
+When nothing is live, the leftmost module shows this same clock-and-weather block on its own, pinned in place while the rest of the strip scrolls past — the same slot a live game takes over automatically the moment there is one. The scroll carries its own copy of the clock only while that slot has been taken over by a live game -- otherwise the static panel is already showing the time, and a second copy scrolling past would just be the same clock twice. That static clock reads 24-hour time (`19:05`); the scrolling clock, on the rare occasion it's the one showing, keeps the 12-hour form (`7:05P`) instead.
 
 ## Continuous Scrolling
 
@@ -59,9 +59,9 @@ Each sport draws what a fan of that sport actually watches for:
 | Baseball | Diamond with the runners on, the count, the outs |
 | Football | Possession, down and distance, field position |
 | Basketball | Period and clock |
-| Soccer | Match clock only |
+| Soccer | Match clock; goal scorers as the notable-performer note |
 
-Basketball and soccer get no segment of their own because nothing beyond the clock changes fast enough to earn the space — the status line already carries it.
+Basketball gets no live-detail segment of its own because nothing beyond the clock changes fast enough to earn the space — the status line already carries it. Soccer still has no down/possession row, but summary keyEvents supply goal scorers for the performer note (the scoreboard itself does not).
 
 A followed team's own live game can also pin to the leftmost module, held in place while everything else scrolls past — so a game you actually care about is never scrolled away mid-at-bat.
 
@@ -81,9 +81,13 @@ Refresh cadence follows the games: **~5 seconds** while any game is live -- a fo
 
 That 5-second data refresh reaches the panel quickly too: a live game's own score, count or batter changing is adopted onto the strip as soon as the next rebuild is ready, rather than waiting for the current scroll pass to finish -- on a long strip a full pass can take minutes, which is far too slow for an at-bat. Composing a rebuilt strip runs in its own OS process, not just a background thread -- a thread still shares the main process's GIL, and on a Pi, composing there was measurably starving the render loop's own thread of CPU time regardless of how the rebuild throttle was tuned, visible as a small periodic pause in the scroll. Confirmed on-device: the same rebuild took over a second on a background thread contending with the live matrix output, and under 150ms in a separate process. The rebuild throttle stays at ~8 seconds (a live score is ~13 seconds old on screen worst case, typically closer to half that) -- now mostly headroom rather than the only lever holding the pause back.
 
+The fetch that feeds that 5-second refresh -- ESPN scores, leaders, streaks, weather -- runs on its own background thread too, for a different reason than the rebuild does: the host framework skips a plugin's own frame update entirely for as long as its data fetch is running, so a slow fetch on the main path means a frozen panel, not just stale data. Confirmed on-device on a day with several games live at once: that fetch alone took close to a second, every single refresh, which is a real freeze at that cadence. Backgrounding it keeps the actual network call off the thread the framework's own frame lock cares about.
+
 ## Configuration
 
-Teams are `{abbr, league, name, rivals}` entries; leagues are `mlb`, `nba`, `nfl`, `laliga`. `rivals` is a list of opponent abbreviations that flag a game as a rivalry on the strip. `laliga` is Spain's top flight only, not every competition a club plays -- ESPN organises soccer one competition at a time rather than one feed per club, and a club that also plays a cup or continental competition would need a second team entry once that competition's own league key is added.
+Teams are `{abbr, league, name, rivals}` entries; leagues are `mlb`, `nba`, `nfl`, `laliga`. `rivals` is a list of opponent abbreviations that flag a game as a rivalry on the strip — while that rivalry is live, the strip can show the game extra times (`rivalry_live_boost`) and slow the scroll (`rivalry_scroll_factor`). `laliga` is Spain's top flight only, not every competition a club plays -- ESPN organises soccer one competition at a time rather than one feed per club, and a club that also plays a cup or continental competition would need a second team entry once that competition's own league key is added.
+
+**Other live games** can be capped with `limit`, optionally restricted to leagues you already follow (`followed_leagues_only`), and/or capped per league (`per_league_limit`) so one sport does not dominate a busy Sunday.
 
 Common alternate spellings are matched automatically — `NYK` and `NY` both find the Knicks, `AZ` and `ARI` both find the Diamondbacks. This matters because a wrong abbreviation is silent: it yields an empty board, which looks exactly like the team not playing.
 
@@ -121,9 +125,9 @@ Safe to run more than once, and migrates an existing install from the plugin's o
 - **Team abbreviations are ESPN's.** Common variants are aliased, but an abbreviation outside that table and outside ESPN's own spelling silently yields an empty board. If a team never appears, that's the first thing to check.
 - **Notable players depend on ESPN publishing leaders** for that game. Some games have none, particularly early in progress. `diagnose_leaders.py` reports what ESPN is actually returning per game, which separates a data gap from a rendering fault.
 - **Four leagues.** NHL and college would each need their abbreviations and a sport path, which is a small addition. Soccer support (`laliga`) is one league only -- other competitions and leagues follow the same pattern once needed.
-- **No notable-performer line for soccer.** ESPN carries baseball/basketball/football leaders on the scoreboard competition itself; soccer instead carries a play-by-play (goals, cards) under a different field this plugin doesn't read yet, so a soccer game's standout is always blank rather than sometimes blank like the other three leagues.
+- **Soccer notable performers need a summary fetch.** Goal scorers come from the summary `keyEvents` list (not the scoreboard), so they appear after the same performer refresh other sports already use — blank until that fetch lands.
 - **Season leaderboards and award watch lists are MLB-only** today.
 
 ## Version
 
-0.50.0
+0.57.0

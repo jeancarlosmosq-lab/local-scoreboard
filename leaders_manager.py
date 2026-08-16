@@ -88,7 +88,7 @@ class BaseballLeadersManager:
         self._restore_from_persistent_cache()
 
     # ------------------------------------------------------------------
-    # Persistent cache (survives restarts)
+    # Persistent Cache (Survives Restarts)
     # ------------------------------------------------------------------
     @staticmethod
     def key(group: str, scope: str = "mlb", pool: str = "") -> str:
@@ -376,7 +376,7 @@ class BaseballLeadersManager:
             self.refresh("pitching", scope)
 
     # ------------------------------------------------------------------
-    # Reads (render path -- cache only, never fetches)
+    # Reads (Render Path -- Cache Only, Never Fetches)
     # ------------------------------------------------------------------
     def get_category(
         self, category: str, scope: str = "mlb", pool: str = ""
@@ -440,7 +440,7 @@ class BaseballLeadersManager:
         )
 
     # ------------------------------------------------------------------
-    # Whole-team rosters (for a team MVP ranked against teammates)
+    # Whole-Team Rosters (For A Team MVP Ranked Against Teammates)
     # ------------------------------------------------------------------
     def refresh_team_roster(self, team_abbr: str) -> None:
         """Fetch one team's active roster and every player's season line.

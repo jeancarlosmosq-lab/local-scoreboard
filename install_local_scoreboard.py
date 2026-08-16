@@ -84,7 +84,7 @@ DEFAULT_ENTRY = {
     "scroll_speed": 22.0,
     "weather": {
         "enabled": True,
-        "label": "BAYONNE",
+        "label": "Bayonne",
         "latitude": 40.6687,
         "longitude": -74.1143,
         "units": "F",

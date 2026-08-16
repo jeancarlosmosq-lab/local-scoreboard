@@ -70,6 +70,13 @@ ESPN_LOGO_ID_OVERRIDES: Dict[str, str] = {
     "BAR": "83",  # Barcelona
 }
 
+# Plugin league keys that are not ESPN's crest CDN folder name. Games and
+# on-disk cache dirs keep the plugin key (laliga); only the download URL
+# swaps. Confirmed: .../laliga/500/83.png 404s, .../soccer/500/83.png works.
+ESPN_LOGO_CDN_LEAGUE: Dict[str, str] = {
+    "laliga": "soccer",
+}
+
 
 class TeamLogoManager:
     """Loads and caches small team logos."""
@@ -153,9 +160,10 @@ class TeamLogoManager:
         target_dir = os.path.join(self.cache_dir, league)
         os.makedirs(target_dir, exist_ok=True)
 
+        cdn_league = ESPN_LOGO_CDN_LEAGUE.get(league, league)
         for candidate in self._candidates(abbr):
             url_path = ESPN_LOGO_ID_OVERRIDES.get(candidate, candidate.lower())
-            url = self.ESPN_LOGO_URL.format(league=league, abbr=url_path)
+            url = self.ESPN_LOGO_URL.format(league=cdn_league, abbr=url_path)
             try:
                 response = requests.get(url, timeout=10)
                 if response.status_code != 200 or not response.content:

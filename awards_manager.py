@@ -30,6 +30,7 @@ from leaders_data_source import (
     HITTING_CATEGORIES,
     PITCHING_CATEGORIES,
 )
+from espn_data_source import abbr_group
 
 
 # Which categories feed which award. Weights let a category count for more
@@ -43,7 +44,7 @@ BREADTH_BONUS = 0.12
 
 AWARD_DEFINITIONS = {
     # "WATCH" used to be on every entry's own label too, on top of the
-    # section banner already reading "AWARDS WATCH" -- doubling the framing
+    # section banner already reading "Awards Watch" -- doubling the framing
     # for something the banner already said once for the whole section.
     "mvp": {
         "label": "MVP",
@@ -59,7 +60,7 @@ AWARD_DEFINITIONS = {
         },
     },
     "cy_young": {
-        "label": "CY YOUNG",
+        "label": "Cy Young",
         "group": "pitching",
         "groups": ["pitching"],
         "pool": "",
@@ -91,12 +92,12 @@ AWARD_DEFINITIONS = {
         },
     },
     # The real Triple Crown is leading all three outright, but a strip
-    # showing five names under "TRIPLE CROWN" already reads as "in the
+    # showing five names under "Triple Crown" already reads as "in the
     # running", not "has won it" -- the same computed-ranking framing MVP
     # and Cy Young already use. Equal weight on purpose: the three crown
     # categories are peers by definition, not weighted toward one.
     "triple_crown": {
-        "label": "TRIPLE CROWN",
+        "label": "Triple Crown",
         "group": "hitting",
         "groups": ["hitting"],
         "pool": "",
@@ -287,8 +288,10 @@ class BaseballAwardsManager:
         if not merged:
             return None
 
-        wanted = (team_abbr or "").upper()
-        candidates = [e for e in merged if (e.get("team") or "").upper() == wanted]
+        wanted = abbr_group(team_abbr)
+        candidates = [
+            e for e in merged if (e.get("team") or "").upper() in wanted
+        ]
         if not candidates:
             return None
 
@@ -302,7 +305,7 @@ class BaseballAwardsManager:
             "player_id": best.get("player_id", ""),
             "name": best["name"],
             "short_name": best["short_name"],
-            "team": wanted,
+            "team": (team_abbr or "").upper(),
             "group": best["group"],
             "categories": sorted(best["categories"], key=lambda c: c["rank"]),
         }

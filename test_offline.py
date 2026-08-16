@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -31,7 +32,7 @@ from strip_renderer import StripRenderer
 
 
 # ----------------------------------------------------------------------
-# Canned ESPN payloads
+# Canned ESPN Payloads
 # ----------------------------------------------------------------------
 def event(eid, away, home, away_score, home_score, state, completed,
           detail="", clock="", period=0, date="2026-08-09T23:05Z"):
@@ -165,9 +166,9 @@ def main():
           "with no situation object to draw a live-detail segment from")
 
     # ---- 2. Names ------------------------------------------------------
-    assert abbreviate_name("Aaron Judge") == "A.JUDGE"
-    assert abbreviate_name("Ronald Acuna Jr.") == "R.ACUNA"
-    assert abbreviate_name("Jos\u00e9 Ram\u00edrez") == "J.RAMIREZ"
+    assert abbreviate_name("Aaron Judge") == "A.Judge"
+    assert abbreviate_name("Ronald Acuna Jr.") == "R.Acuna"
+    assert abbreviate_name("Jos\u00e9 Ram\u00edrez") == "J.Ramirez"
     assert ascii_fold("Cristopher S\u00e1nchez").isascii()
     print("PASS  player names abbreviate and fold to ASCII")
 
@@ -196,7 +197,7 @@ def main():
         ],
     }
     board_leaders = src._parse_competition_leaders(board_comp)
-    assert board_leaders and board_leaders[0]["name"] == "A.JUDGE", board_leaders
+    assert board_leaders and board_leaders[0]["name"] == "A.Judge", board_leaders
     assert board_leaders[0]["category"] == "HR"
     assert board_leaders[0]["team"] == "NYY", (
         f"leader team id was not resolved through competitors: "
@@ -289,9 +290,9 @@ def main():
     # The board shows the followed team's offensive line -- and the winner's
     # when the followed team lost, because the story of a loss is who beat you.
     perf_leaders = [
-        {"team": "NYY", "name": "G.COLE", "line": "7.0 IP, 2 ER", "side": "pitching"},
-        {"team": "NYY", "name": "A.JUDGE", "line": "2-4, HR", "side": "batting"},
-        {"team": "BOS", "name": "J.DURAN", "line": "3-4, 2B", "side": "batting"},
+        {"team": "NYY", "name": "G.Cole", "line": "7.0 IP, 2 ER", "side": "pitching"},
+        {"team": "NYY", "name": "A.Judge", "line": "2-4, HR", "side": "batting"},
+        {"team": "BOS", "name": "J.Duran", "line": "3-4, 2B", "side": "batting"},
     ]
     won = {"state": STATE_FINAL, "league": "mlb", "leaders": perf_leaders,
            "home": {"abbr": "NYY", "winner": True},
@@ -301,9 +302,9 @@ def main():
             "away": {"abbr": "BOS", "winner": True}}
     on_win = ESPNGamesSource.pick_performer(won, "NYY")
     on_loss = ESPNGamesSource.pick_performer(lost, "NYY")
-    assert on_win["name"] == "A.JUDGE", on_win
+    assert on_win["name"] == "A.Judge", on_win
     assert on_win["side"] == "batting", "a pitching line was chosen"
-    assert on_loss["name"] == "J.DURAN", on_loss
+    assert on_loss["name"] == "J.Duran", on_loss
     assert on_loss["team"] == "BOS", "should switch to the winner after a loss"
     assert ESPNGamesSource.pick_performer({"leaders": []}, "NYY") is None
     print(f"PASS  performer follows the result: won -> {on_win['name']}, "
@@ -330,7 +331,7 @@ def main():
     assert len(hitters) == 2, hitters
     by_team = {h["team"]: h for h in hitters}
     # The better line wins, not merely the first listed
-    assert by_team["NYY"]["name"] == "A.JUDGE", by_team["NYY"]
+    assert by_team["NYY"]["name"] == "A.Judge", by_team["NYY"]
     assert "HR" in by_team["NYY"]["line"] and "3 RBI" in by_team["NYY"]["line"]
     assert all(h["side"] == "batting" for h in hitters)
     assert src._parse_boxscore_batting({}) == []
@@ -404,7 +405,7 @@ def main():
 
     leaders = src._parse_leaders(SUMMARY, per_game=2)
     assert len(leaders) == 2, leaders
-    assert leaders[0]["name"] == "A.JUDGE"
+    assert leaders[0]["name"] == "A.Judge"
     assert "HR" in leaders[0]["line"]
     assert src._parse_leaders({}, 2) == []
     print(f"PASS  notable players parsed: {[(l['name'], l['line']) for l in leaders]}")
@@ -483,7 +484,7 @@ def main():
     print("PASS  broadcast parsing keeps only the most common local "
           "channel, not every regional feed on the game")
 
-    # ---- 4. Team filtering and cadence ----------------------------------
+    # ---- 4. Team Filtering And Cadence ----------------------------------
     gm = GamesManager(log, cache_manager=FakeCache())
 
     class StubSource:
@@ -495,7 +496,7 @@ def main():
 
         def fetch_batting(self, league, event_id):
             # Baseball reads the boxscore, since its summary has no leaders.
-            return [{"team": "NYY", "name": "A.JUDGE", "line": "2-4, HR, 3 RBI",
+            return [{"team": "NYY", "name": "A.Judge", "line": "2-4, HR, 3 RBI",
                      "category": "BAT", "side": "batting"}]
 
     gm.source = StubSource()
@@ -597,7 +598,7 @@ def main():
     print("PASS  notable players attach only to games that have been played")
 
     # ---- 5. Rendering ---------------------------------------------------
-    logo_dir = "/home/claude/_nyc_logos"
+    logo_dir = os.path.join(tempfile.gettempdir(), "_nyc_logos")
     os.makedirs(os.path.join(logo_dir, "mlb"), exist_ok=True)
     os.makedirs(os.path.join(logo_dir, "nba"), exist_ok=True)
     os.makedirs(os.path.join(logo_dir, "nfl"), exist_ok=True)
@@ -650,6 +651,25 @@ def main():
     print(f"PASS  soccer logo downloads use ESPN's numeric team id "
           f"override instead of the abbreviation: {url_calls}")
 
+    # Plugin league key is "laliga"; ESPN's crest CDN folder is "soccer".
+    # Downloads that keep the plugin key 404 and then stick in _misses for
+    # the whole session -- Barcelona (and any La Liga crest) stays blank.
+    url_calls.clear()
+    logos_laliga = TeamLogoManager(log, cache_dir=logo_dir, allow_download=True)
+    _logo_mod.requests.get = _stub_get
+    try:
+        logos_laliga._download("laliga", "BAR")
+    finally:
+        _logo_mod.requests.get = orig_requests_get
+    assert any("/soccer/500/83.png" in u for u in url_calls), (
+        f"laliga crest downloads must hit ESPN's soccer CDN folder, not "
+        f"laliga: {url_calls}"
+    )
+    assert not any("/laliga/500/" in u for u in url_calls), (
+        f"must not request the plugin league key as a CDN folder: {url_calls}"
+    )
+    print("PASS  laliga crest downloads remap to ESPN's soccer CDN folder")
+
     for size in [(192, 32), (128, 32), (64, 32), (192, 64)]:
         for game in kept:
             display = FakeDisplay(*size)
@@ -682,9 +702,9 @@ def main():
     for i, frame in enumerate(stack):
         sheet.paste(frame, (0, i * 32))
     sheet.resize((192 * 4, 32 * len(stack) * 4), Image.NEAREST).save(
-        "/home/claude/nyc_cards.png")
+        os.path.join(tempfile.gettempdir(), "nyc_cards.png"))
 
-    # ---- 5b. Team strips -----------------------------------------------
+    # ---- 5b. Team Strips -----------------------------------------------
     # A strip must carry a team's whole story, and each sport must draw the
     # detail a fan of that sport actually watches for.
     strip_cases = [
@@ -707,7 +727,7 @@ def main():
                 "away": {"abbr": "BOS", "score": "4"},
                 "home": {"abbr": team["abbr"], "score": "7"},
                 "situation": situation,
-                "leaders": [{"category": "TOP", "name": "A.JUDGE",
+                "leaders": [{"category": "TOP", "name": "A.Judge",
                              "line": "2-4, HR, 3 RBI"}],
             }
             strip = sr.build_strip([(team, [live_game])])
@@ -783,7 +803,7 @@ def main():
         "away": {"abbr": "BOS", "score": "4", "winner": False},
         "home": {"abbr": "NYY", "score": "7", "winner": True},
         "situation": {},
-        "leaders": [{"category": "HR", "name": "A.JUDGE", "line": "2-4, HR"}],
+        "leaders": [{"category": "HR", "name": "A.Judge", "line": "2-4, HR"}],
     }
     with_logos = rboth.build_strip(
         [({"abbr": "NYY", "league": "mlb", "name": "Yankees"}, [both_game])])
@@ -834,7 +854,7 @@ def main():
 
     long_note_img = Image.new("RGB", (150, 32), (0, 0, 0))
     long_note_spy = _NoteSpyDraw(_NoteID.Draw(long_note_img))
-    rnote2._draw_note(long_note_img, long_note_spy, 2, "Aaron Judge", "A.JUDGE",
+    rnote2._draw_note(long_note_img, long_note_spy, 2, "Aaron Judge", "A.Judge",
                       "2-4, HR, 3 RBI, 2 R, BB", note_font, note_row_h)
     assert "Aaron Judge" in long_note_spy.calls, (
         f"a stat line wider than the short name should show the full name: "
@@ -843,9 +863,9 @@ def main():
 
     short_note_img = Image.new("RGB", (150, 32), (0, 0, 0))
     short_note_spy = _NoteSpyDraw(_NoteID.Draw(short_note_img))
-    rnote2._draw_note(short_note_img, short_note_spy, 2, "Aaron Judge", "A.JUDGE",
+    rnote2._draw_note(short_note_img, short_note_spy, 2, "Aaron Judge", "A.Judge",
                       "HR", note_font, note_row_h)
-    assert "A.JUDGE" in short_note_spy.calls and "Aaron Judge" not in short_note_spy.calls, (
+    assert "A.Judge" in short_note_spy.calls and "Aaron Judge" not in short_note_spy.calls, (
         f"a stat line narrower than the short name should keep the "
         f"abbreviation: {short_note_spy.calls}"
     )
@@ -906,10 +926,10 @@ def main():
     without_boards = rboard.build_strip([board_team])
     rboards2 = StripRenderer(FakeDisplay(192, 32), {}, log, logo_manager=logos)
     with_boards = rboards2.build_strip([board_team], leaderboards=[
-        ("MLB HR LEADERS", [
+        ("MLB HR Leaders", [
             {"rank": 1, "short_name": "C.Raleigh", "team": "SEA", "value": "48"},
             {"rank": 2, "short_name": "A.Judge", "team": "NYY", "value": "41"}]),
-        ("MLB ERA LEADERS", [
+        ("MLB ERA Leaders", [
             {"rank": 1, "short_name": "T.Skubal", "team": "DET", "value": "2.49"}]),
     ])
     assert with_boards.width > without_boards.width, (
@@ -919,7 +939,7 @@ def main():
     rboard._strip_key = None
     rempty = StripRenderer(FakeDisplay(192, 32), {}, log, logo_manager=logos)
     with_empty = rempty.build_strip([board_team],
-                                    leaderboards=[("MLB HR LEADERS", [])])
+                                    leaderboards=[("MLB HR Leaders", [])])
     assert with_empty.width == without_boards.width, (
         "an empty leaderboard added a blank segment"
     )
@@ -943,16 +963,16 @@ def main():
 
     print("PASS  statistics open with a league mark ahead of the content")
 
-    # A divider must separate the section banner itself ("MLB SEASON
-    # LEADERS") from the first category's content -- without it, the title
-    # ran directly into "AL HR LEADERS" with only a small gap and no line.
+    # A divider must separate the section banner itself ("MLB Season
+    # Leaders") from the first category's content -- without it, the title
+    # ran directly into "AL HR Leaders" with only a small gap and no line.
     dsep = FakeDisplay(192, 32)
     rsep = StripRenderer(dsep, {}, log, logo_manager=logos)
     sep_rows = [{"rank": 1, "short_name": "C.Raleigh", "team": "SEA",
                 "value": "48"}]
     sep_strip = rsep.build_strip(
-        [], leaderboards=[("AL HR LEADERS", sep_rows, "HR")],
-        awards=[("AL MVP WATCH", sep_rows)],
+        [], leaderboards=[("AL HR Leaders", sep_rows, "HR")],
+        awards=[("AL MVP Watch", sep_rows)],
     )
     spx = sep_strip.load()
     divider_cols = [
@@ -987,9 +1007,9 @@ def main():
         "situation": {"kind": "basketball", "clock": "5:00"}, "leaders": [],
     }]
     excess_strip = rexcess.build_strip(
-        [excess_team], leaderboards=[("AL HR LEADERS", excess_rows, "HR")],
-        awards=[("AL MVP WATCH", excess_rows)], other_live=excess_other_live,
-        team_mvps={"NYY": {"name": "Aaron Judge", "short_name": "A.JUDGE",
+        [excess_team], leaderboards=[("AL HR Leaders", excess_rows, "HR")],
+        awards=[("AL MVP Watch", excess_rows)], other_live=excess_other_live,
+        team_mvps={"NYY": {"name": "Aaron Judge", "short_name": "A.Judge",
                            "line": "AVG .312  HR 35  RBI 88"}},
     )
     expx = excess_strip.load()
@@ -1062,7 +1082,7 @@ def main():
         f"expected a divider immediately after the live-around-the-league "
         f"banner, before its first game: {live_div_calls}"
     )
-    print("PASS  a divider separates the 'LIVE AROUND THE LEAGUE' banner "
+    print("PASS  a divider separates the 'Live Around The League' banner "
           "from its own first game")
 
     # A leaderboard segment is a table: names start at one column and values
@@ -1074,7 +1094,7 @@ def main():
     ]
     dalign = FakeDisplay(192, 32)
     ralign = StripRenderer(dalign, {}, log)
-    seg = ralign.build_strip([], leaderboards=[("AL AVG LEADERS", align_rows, "AVG")])
+    seg = ralign.build_strip([], leaderboards=[("AL AVG Leaders", align_rows, "AVG")])
     apx = seg.load()
 
     # Three ranked rows, not two
@@ -1373,7 +1393,7 @@ def main():
     # The title and its column header share the top row and must not overlap.
     rhead = StripRenderer(FakeDisplay(192, 32), {}, log)
     header_seg = rhead.build_strip(
-        [], leaderboards=[("AL AVG LEADERS", align_rows, "AVG")])
+        [], leaderboards=[("AL AVG Leaders", align_rows, "AVG")])
     assert header_seg.width >= seg.width
     print("PASS  title and column header sit side by side")
 
@@ -1382,9 +1402,9 @@ def main():
     # separate runs of text, so a name and its team read as visually
     # distinct pieces rather than one flat-coloured line.
     medal_rows = [
-        {"rank": 1, "short_name": "A.JUDGE", "team": "NYY", "value": "58"},
-        {"rank": 2, "short_name": "R.DEVERS", "team": "BOS", "value": "42"},
-        {"rank": 3, "short_name": "V.GUERRERO", "team": "TOR", "value": "40"},
+        {"rank": 1, "short_name": "A.Judge", "team": "NYY", "value": "58"},
+        {"rank": 2, "short_name": "R.Devers", "team": "BOS", "value": "42"},
+        {"rank": 3, "short_name": "V.Guerrero", "team": "TOR", "value": "40"},
     ]
     dmedal = Image.new("RGB", (220, 32), (0, 0, 0))
     from PIL import ImageDraw as _MedalID
@@ -1406,19 +1426,19 @@ def main():
         return real_text(xy, text, font=font, fill=fill, **kw)
 
     medal_draw.text = spy_text
-    rmedal._draw_leaderboard(dmedal, medal_draw, 2, "HR LEADERS", medal_rows,
+    rmedal._draw_leaderboard(dmedal, medal_draw, 2, "HR Leaders", medal_rows,
                              medal_font, medal_row_h, "HR")
     medal_draw.text = real_text
 
     by_text = {text: fill for text, fill in calls}
-    assert by_text.get("1.A.JUDGE") == StripRenderer.GOLD, (
-        f"rank 1 name drawn in {by_text.get('1.A.JUDGE')}, not gold"
+    assert by_text.get("1.A.Judge") == StripRenderer.GOLD, (
+        f"rank 1 name drawn in {by_text.get('1.A.Judge')}, not gold"
     )
-    assert by_text.get("2.R.DEVERS") == StripRenderer.SILVER, (
-        f"rank 2 name drawn in {by_text.get('2.R.DEVERS')}, not silver"
+    assert by_text.get("2.R.Devers") == StripRenderer.SILVER, (
+        f"rank 2 name drawn in {by_text.get('2.R.Devers')}, not silver"
     )
-    assert by_text.get("3.V.GUERRERO") == StripRenderer.BRONZE, (
-        f"rank 3 name drawn in {by_text.get('3.V.GUERRERO')}, not bronze"
+    assert by_text.get("3.V.Guerrero") == StripRenderer.BRONZE, (
+        f"rank 3 name drawn in {by_text.get('3.V.Guerrero')}, not bronze"
     )
     assert by_text.get("NYY") == StripRenderer.TEAM_COLORS["NYY"], (
         f"NYY drawn in {by_text.get('NYY')}, not its own team colour"
@@ -1460,13 +1480,13 @@ def main():
         lb8_draw.text = _lb8_spy
         lb8_font, lb8_row_h = rlb8._fit_font(lb8_draw, 4, rlb8.height)
         assert lb8_row_h == 8, f"test setup error: expected row_h=8, got {lb8_row_h}"
-        rlb8._draw_leaderboard(lb8_img, lb8_draw, 2, "HR LEADERS", medal_rows,
+        rlb8._draw_leaderboard(lb8_img, lb8_draw, 2, "HR Leaders", medal_rows,
                                lb8_font, lb8_row_h, "HR")
     finally:
         _lb8mod.StripRenderer._fit_font = _lb8_orig_fit
-    assert "1.A.JUDGE" in lb8_calls, f"rank 1 missing at row_h=8: {lb8_calls}"
-    assert "2.R.DEVERS" in lb8_calls, f"rank 2 missing at row_h=8: {lb8_calls}"
-    assert "3.V.GUERRERO" in lb8_calls, (
+    assert "1.A.Judge" in lb8_calls, f"rank 1 missing at row_h=8: {lb8_calls}"
+    assert "2.R.Devers" in lb8_calls, f"rank 2 missing at row_h=8: {lb8_calls}"
+    assert "3.V.Guerrero" in lb8_calls, (
         f"rank 3 was silently dropped at row_h=8, the real hardware row "
         f"height, even though it draws fine at this sandbox's own "
         f"natural row_h: {lb8_calls}"
@@ -1514,6 +1534,40 @@ def main():
     print("PASS  strip live-detail draws the football possession marker as "
           "ASCII \"*\", not the Unicode \"●\" that crashes real BDF fonts")
 
+    # Football live detail must reserve width for the yard-line row, not
+    # just possession + down. Drawing "SEA 35" (or any spot) without
+    # advancing the returned width is what made the next strip segment
+    # paint through the live card during other-live NFL games.
+    from PIL import ImageDraw as _SpotID
+    spot_img = Image.new("RGB", (220, 32), (0, 0, 0))
+    spot_draw = _SpotID.Draw(spot_img)
+    spot_renderer = StripRenderer(FakeDisplay(192, 32), {}, log)
+    spot_font, spot_row_h = spot_renderer._fit_font(
+        spot_draw, 2, spot_renderer.height)
+    spot_game = {
+        "id": "spot1", "league": "nfl", "state": STATE_LIVE, "start": "",
+        "away": {"abbr": "DAL", "score": "14"},
+        "home": {"abbr": "SEA", "score": "7"},
+        "situation": {"kind": "football", "down_distance": "1st & 10",
+                      "yard_line": "SEA 35", "possession": "DAL",
+                      "red_zone": False},
+    }
+    spot_w = spot_renderer._draw_live_detail(
+        spot_img, spot_draw, 0, spot_game, spot_font, spot_row_h)
+    spot_ink_right = 0
+    spot_px = spot_img.load()
+    for _x in range(spot_img.width):
+        for _y in range(spot_img.height):
+            if sum(spot_px[_x, _y]) > 30:
+                spot_ink_right = _x
+    assert spot_w >= spot_ink_right + 1, (
+        f"football live-detail returned width {spot_w} but ink reaches "
+        f"x={spot_ink_right} -- next strip segment will overlap the "
+        f"yard line (DAL@SEA other-live regression)"
+    )
+    print("PASS  football live-detail width covers the yard-line row, "
+          "not only possession + down")
+
     # Same check for the static panel's own possession ticker -- a separate
     # code path (render_static_panel), separate draw call, same bug class.
     import PIL.ImageDraw as _PanelIDMod
@@ -1554,7 +1608,7 @@ def main():
     print("PASS  award labels no longer repeat 'WATCH' the section banner "
           "already carries")
 
-    # ---- 5c. Logo manager: AL/NL marks -----------------------------------
+    # ---- 5c. Logo Manager: AL/NL Marks -----------------------------------
     # get_scope_logo must only ever answer for al/nl -- anything else (a
     # typo, a real league code passed by mistake) returns None immediately,
     # with no network attempt, rather than silently trying to download
@@ -1572,7 +1626,7 @@ def main():
     # text label regardless.
     class TitleStubLeaders:
         def get_category(self, category, scope="mlb", pool=""):
-            return [{"rank": 1, "name": "Test Player", "short_name": "T.PLAYER",
+            return [{"rank": 1, "name": "Test Player", "short_name": "T.Player",
                      "team": "NYY", "value": "1", "player_id": "1"}]
 
         def get_player_stats(self, player_id, group, scope="mlb", pool=""):
@@ -1589,10 +1643,10 @@ def main():
     title_plugin._boards_cache = None
     boards, _ = title_plugin._leaderboards()
     titles = {b[0] for b in boards}
-    assert "AL HR LEADERS" in titles and "NL HR LEADERS" in titles, (
+    assert "AL HR Leaders" in titles and "NL HR Leaders" in titles, (
         f"AL/NL board lost its text prefix: {titles}"
     )
-    assert "MLB HR LEADERS" in titles, (
+    assert "MLB HR Leaders" in titles, (
         f"the merged scope lost its text label: {titles}"
     )
     scopes_seen = {b[3] for b in boards if len(b) > 3}
@@ -1607,7 +1661,7 @@ def main():
     # before that change, with no "line" attached.
     class NoLineStubLeaders:
         def get_category(self, category, scope="mlb", pool=""):
-            return [{"rank": 1, "name": "Aaron Judge", "short_name": "A.JUDGE",
+            return [{"rank": 1, "name": "Aaron Judge", "short_name": "A.Judge",
                      "team": "NYY", "value": "35", "player_id": "j1"}]
 
         def get_player_stats(self, player_id, group, scope="mlb", pool=""):
@@ -1660,17 +1714,17 @@ def main():
     # real leaderboard content, since an empty strip floors to a fixed
     # minimum width regardless of the clock, which would mask the
     # difference.
-    clock_rows = [{"rank": 1, "short_name": "A.JUDGE", "team": "NYY", "value": "35"}]
+    clock_rows = [{"rank": 1, "short_name": "A.Judge", "team": "NYY", "value": "35"}]
     dnoclock = FakeDisplay(192, 32)
     rnoclock = StripRenderer(dnoclock, {}, log)
     shown = rnoclock.build_strip(
-        [], leaderboards=[("AL HR LEADERS", clock_rows, "HR")],
+        [], leaderboards=[("AL HR Leaders", clock_rows, "HR")],
         clock=_clock_dt(2026, 8, 9, 19, 5), show_clock=True)
     assert rnoclock._clock_box, "clock position should be recorded when shown"
 
     rnoclock2 = StripRenderer(FakeDisplay(192, 32), {}, log)
     hidden = rnoclock2.build_strip(
-        [], leaderboards=[("AL HR LEADERS", clock_rows, "HR")],
+        [], leaderboards=[("AL HR Leaders", clock_rows, "HR")],
         clock=_clock_dt(2026, 8, 9, 19, 5), show_clock=False)
     assert not rnoclock2._clock_box, (
         "no clock position should be recorded when show_clock is False"
@@ -1694,7 +1748,7 @@ def main():
         "home": {"abbr": "NYY", "score": "7"},
         "situation": {"kind": "baseball", "balls": 2, "strikes": 1, "outs": 2,
                       "first": True, "second": False, "third": True,
-                      "batter": "J.SOTO", "pitcher": "G.COLE"},
+                      "batter": "J.Soto", "pitcher": "G.Cole"},
         "leaders": [],
     }
     panel = rpanel.render_static_panel(live_panel_game, "NYY", 64)
@@ -1961,9 +2015,17 @@ def main():
     update_plugin.teams_idle_interval = 60
     update_plugin.teams_live_interval = 5
 
+    # update() dispatches the actual refresh to a background thread now --
+    # see _dispatch_background_update's own docstring for why (the host
+    # framework skips a plugin's display() entirely for as long as its
+    # update() call is running, and the real refresh is genuine network
+    # I/O) -- so every assertion here needs to wait for that dispatch to
+    # actually finish before checking what it did, the same as any other
+    # background-dispatch test in this file.
     update_plugin.games = _RefreshSpyGames([])
     update_plugin._last_update = time.time() - 10
     update_plugin.update()
+    update_plugin._wait_for_background_update()
     assert update_plugin.games.refresh_calls == [], (
         "should not refresh yet -- 10s in is still under the 60s idle gate "
         "with nothing live and no game starting soon"
@@ -1975,6 +2037,7 @@ def main():
     }])
     update_plugin._last_update = time.time() - 10
     update_plugin.update()
+    update_plugin._wait_for_background_update()
     assert update_plugin.games.refresh_calls == [True], (
         f"any live followed game should force a refresh past the ~5s gate, "
         f"not just one pinned to the static panel: "
@@ -1986,6 +2049,7 @@ def main():
     update_plugin.games = _RefreshSpyGames([], starting_soon=True)
     update_plugin._last_update = time.time() - 10
     update_plugin.update()
+    update_plugin._wait_for_background_update()
     assert update_plugin.games.refresh_calls == [True], (
         f"a game starting soon should also force a refresh past the ~5s "
         f"gate: {update_plugin.games.refresh_calls}"
@@ -1999,6 +2063,7 @@ def main():
     update_plugin.games = _RefreshSpyGames([], other_live=True)
     update_plugin._last_update = time.time() - 10
     update_plugin.update()
+    update_plugin._wait_for_background_update()
     assert update_plugin.games.refresh_calls == [True], (
         f"an other-live game with no followed team live should also force "
         f"a refresh past the ~5s gate: {update_plugin.games.refresh_calls}"
@@ -2006,6 +2071,86 @@ def main():
     print("PASS  update() checks for a live game every ~60s, then drops to "
           "~5s the moment any game is live anywhere or a followed team is "
           "about to start")
+
+    # update() must return almost immediately even when the underlying
+    # refresh is slow -- the whole reason it dispatches to a background
+    # thread rather than calling games.refresh() inline. The host
+    # framework skips a plugin's display() entirely for as long as its
+    # update() call is running (confirmed against the real one: a normal
+    # live-game refresh took ~1s on the Pi, freezing the panel for a
+    # fifth of every live_interval), so update() itself being fast is the
+    # actual point of this, not just an implementation detail.
+    class _SlowRefreshGames(_RefreshSpyGames):
+        def __init__(self, *a, delay=0.2, **kw):
+            super().__init__(*a, **kw)
+            self._delay = delay
+            self.refresh_started = threading.Event()
+            self.refresh_finished = threading.Event()
+
+        def refresh(self, force=False):
+            self.refresh_started.set()
+            time.sleep(self._delay)
+            super().refresh(force=force)
+            self.refresh_finished.set()
+
+    slow_games = _SlowRefreshGames([{
+        "id": "live2", "league": "mlb", "state": STATE_LIVE,
+        "home": {"abbr": "NYY"}, "away": {"abbr": "BOS"},
+    }], delay=0.3)
+    update_plugin.games = slow_games
+    update_plugin._last_update = time.time() - 10
+    call_start = time.time()
+    update_plugin.update()
+    call_elapsed = time.time() - call_start
+    assert call_elapsed < 0.1, (
+        f"update() should return almost immediately, not block on the "
+        f"refresh itself: took {call_elapsed:.3f}s"
+    )
+    assert slow_games.refresh_calls == [], (
+        f"the refresh should not have happened yet -- update() only just "
+        f"dispatched it: {slow_games.refresh_calls}"
+    )
+    assert slow_games.refresh_finished.wait(2.0), (
+        "the background refresh never completed at all"
+    )
+    assert slow_games.refresh_calls == [True], (
+        f"the background refresh should have run exactly once by now: "
+        f"{slow_games.refresh_calls}"
+    )
+    print(f"PASS  update() returns in {call_elapsed*1000:.1f}ms even when "
+          f"the underlying refresh takes {slow_games._delay*1000:.0f}ms, "
+          f"dispatched to a background thread instead of blocking")
+
+    # Single-flight: update() firing again while a slow refresh is still
+    # in progress must not start a second, overlapping one -- that would
+    # only add more concurrent network load, not fix anything, on exactly
+    # the slow-network day this exists for.
+    busy_games = _SlowRefreshGames([{
+        "id": "live3", "league": "mlb", "state": STATE_LIVE,
+        "home": {"abbr": "NYY"}, "away": {"abbr": "BOS"},
+    }], delay=0.3)
+    update_plugin.games = busy_games
+    update_plugin._last_update = time.time() - 10
+    update_plugin.update()
+    assert busy_games.refresh_started.wait(2.0), (
+        "the first dispatch's refresh never started"
+    )
+    # The gate itself would normally block a second dispatch this soon
+    # (well under live_interval), so back-date _last_update to prove the
+    # *single-flight guard*, not the gate, is what's actually preventing
+    # overlap here.
+    update_plugin._last_update = time.time() - 10
+    update_plugin.update()
+    assert busy_games.refresh_finished.wait(2.0), (
+        "the in-flight refresh never completed"
+    )
+    assert busy_games.refresh_calls == [True], (
+        f"a second update() while one refresh was still in flight should "
+        f"not have started an overlapping second refresh: "
+        f"{busy_games.refresh_calls}"
+    )
+    print("PASS  a second update() while a background refresh is still in "
+          "flight does not dispatch an overlapping second one")
 
     # The bottom row alternates: 64 pixels will not hold the bases, the count,
     # the outs and a player name at once -- the name truncates to a letter.
@@ -2038,8 +2183,8 @@ def main():
                     "home": {"abbr": "NYY", "score": "7"},
                     "situation": {"kind": "baseball", "balls": 2, "strikes": 1,
                                  "outs": 1, "first": True, "second": False,
-                                 "third": True, "batter": "J.SOTO",
-                                 "pitcher": "G.COLE"}},
+                                 "third": True, "batter": "J.Soto",
+                                 "pitcher": "G.Cole"}},
         "football": {"id": "pf1", "league": "nfl", "status_detail": "Q2",
                     "period": 2, "away": {"abbr": "BUF", "score": "14"},
                     "home": {"abbr": "NYG", "score": "10"},
@@ -2284,6 +2429,31 @@ def main():
     print(f"PASS  standings parsing flattens streaks across every "
           f"division/conference group: {parsed_streaks}")
 
+    nested_standings = {
+        "children": [
+            {"name": "American League", "children": [
+                {"name": "AL East", "standings": {"entries": [
+                    {"team": {"abbreviation": "NYY"}, "stats": [
+                        {"type": "streak", "displayValue": "W2"},
+                    ]},
+                ]}},
+            ]},
+            {"name": "National League", "children": [
+                {"name": "NL East", "standings": {"entries": [
+                    {"team": {"abbreviation": "NYM"}, "stats": [
+                        {"type": "streak", "displayValue": "L1"},
+                    ]},
+                ]}},
+            ]},
+        ]
+    }
+    nested_parsed = ESPNGamesSource._parse_standings(nested_standings)
+    assert nested_parsed == {"NYY": "W2", "NYM": "L1"}, (
+        f"nested conference→division standings must still flatten: "
+        f"{nested_parsed}"
+    )
+    print("PASS  standings parsing walks nested conference/division children")
+
     # refresh_streaks(): one request per followed league, throttled on its
     # own interval independent of the game refresh, and merged rather than
     # replaced (a league that fails this round must not wipe out a streak
@@ -2406,10 +2576,10 @@ def main():
     rrival._draw_game(rival_img, rival_spy, 2, rival_final, win_font, win_row_h,
                       focus_abbr="NYY", rivals=["BOS"])
     rival_texts = [c[0] for c in rival_spy.calls]
-    assert any("RIVALRY" in t for t in rival_texts), (
-        f"a configured rival should flag the status with RIVALRY: {rival_texts}"
+    assert any("Rivalry" in t for t in rival_texts), (
+        f"a configured rival should flag the status with Rivalry: {rival_texts}"
     )
-    rival_colour_calls = [c for c in rival_spy.calls if "RIVALRY" in c[0]]
+    rival_colour_calls = [c for c in rival_spy.calls if "Rivalry" in c[0]]
     assert rival_colour_calls[0][1] == StripRenderer.RIVALRY, (
         f"a rivalry status should draw in the RIVALRY colour: {rival_colour_calls}"
     )
@@ -2419,7 +2589,7 @@ def main():
     rrival._draw_game(plain_img, plain_spy, 2, plain_final, win_font, win_row_h,
                       focus_abbr="NYY", rivals=["BOS"])
     plain_texts = [c[0] for c in plain_spy.calls]
-    assert not any("RIVALRY" in t for t in plain_texts), (
+    assert not any("Rivalry" in t for t in plain_texts), (
         f"an opponent not on the rivals list must not be flagged: {plain_texts}"
     )
     print("PASS  a configured rival recolours and flags the game status; "
@@ -2660,7 +2830,7 @@ def main():
 
     dfcol = FakeDisplay(192, 32)
     rfcol = StripRenderer(dfcol, {}, log)
-    fcol_weather = {"label": "BAYONNE", "units": "F", "now_temp": 78,
+    fcol_weather = {"label": "Bayonne", "units": "F", "now_temp": 78,
                     "now_condition": "CLEAR", "alerts": [],
                     "hourly": [{"name": "8P", "temp": 77, "condition": "Clear"},
                               {"name": "9P", "temp": 75, "condition": "Rain"}]}
@@ -2720,13 +2890,13 @@ def main():
           f"and temperature (gap_above={gap_above}px, "
           f"gap_below={gap_below}px), not pinned to one side of it")
 
-    # The forecast row (whichever of NEXT HOURS / 4 DAY FORECAST) must be
-    # centred under its own header when the header is wider than the
-    # columns, not left flush with it -- a header wider than one short
-    # column used to leave all the slack on the right, the same
-    # slack-dumped-on-one-side mistake this file already fixes
-    # vertically everywhere else. When the columns are wider than the
-    # header instead, they stay flush-left, since there is no slack to
+    # The forecast row (Next Hours -- the only one left; the 4-day forecast
+    # was removed entirely) must be centred under its own header when the
+    # header is wider than the columns, not left flush with it -- a header
+    # wider than one short column used to leave all the slack on the
+    # right, the same slack-dumped-on-one-side mistake this file already
+    # fixes vertically everywhere else. When the columns are wider than
+    # the header instead, they stay flush-left, since there is no slack to
     # split. Checked by spying on both _draw_forecast_row's own starting
     # x (the header's position, whatever preceded it in the weather
     # block) and the x each real _draw_forecast_column call receives, so
@@ -2752,10 +2922,16 @@ def main():
     rcenter._draw_forecast_column = _spy_fcol
 
     narrow_weather = {"now_temp": 78, "units": "F", "now_condition": "Clear",
-                      "daily": [{"name": "MON", "temp": 80}]}
+                      "hourly": [{"name": "8P", "temp": 80}]}
     narrow_probe = _CenterID.Draw(Image.new("RGB", (1, 1)))
     narrow_font, narrow_row_h = rcenter._fit_font(narrow_probe, 4, rcenter.height)
-    header_w = rcenter._measure(narrow_probe, "4 DAY FORECAST", narrow_font)[0]
+    # The header draws in a font strictly smaller than the columns -- see
+    # _draw_forecast_row's own docstring -- so this has to match that same
+    # font selection, not the shared body font, or the two disagree on
+    # header_w the same way production and a stale test would.
+    _narrow_smaller = rcenter._smaller_font(narrow_probe, narrow_row_h)
+    narrow_header_font = _narrow_smaller[0] if _narrow_smaller else narrow_font
+    header_w = rcenter._measure(narrow_probe, "Next Hours", narrow_header_font)[0]
 
     rcenter._draw_weather(
         Image.new("RGB", (300, 32), (0, 0, 0)), _CenterID.Draw(
@@ -2767,7 +2943,7 @@ def main():
     row_x = row_start_calls[0]
     single_col_w = orig_fcol(
         _CenterID.Draw(Image.new("RGB", (1, 1))), 0,
-        {"name": "MON", "temp": 80}, narrow_font, narrow_row_h, "F",
+        {"name": "8P", "temp": 80}, narrow_font, narrow_row_h, "F",
         content_top=narrow_row_h + 1, measure_only=True)
     assert single_col_w < header_w, (
         f"test setup error: expected the single column ({single_col_w}px) "
@@ -2786,20 +2962,19 @@ def main():
         f"(header={header_w}px, column={single_col_w}px)"
     )
 
-    # This fixture is 4 real day/temp columns -- production never shows
-    # more than 4 (`daily[:4]`) -- against the same "4 DAY FORECAST"
-    # header used above. In the sandbox font these 4 columns are reliably
-    # wider than their own header, so the row should sit flush-left with
-    # no shift. On real BDF fonts that isn't guaranteed: confirmed on the
-    # Pi, "4 DAY FORECAST" (70px) actually measured *wider* than these 4
-    # columns combined (68px), flipping which side the code's own
-    # max(0, (header_w - total_w) // 2) formula shifts -- a 1-2px
+    # This fixture is 5 real hour/temp columns -- production never shows
+    # more than 5 (`hourly[:5]`) -- against the same "Next Hours" header
+    # used above. In the sandbox font these columns are reliably wider
+    # than their own header, so the row should sit flush-left with no
+    # shift. On real BDF fonts that isn't guaranteed, the same way it
+    # wasn't for the 4-day forecast before it was removed -- a 1-2px
     # centering nudge either way is harmless on screen, so the assertion
     # checks the row obeys that same formula (whichever side is wider),
     # not a specific hardcoded outcome that only held for one font.
     wide_weather = {"now_temp": 78, "units": "F", "now_condition": "Clear",
-                    "daily": [{"name": "MON", "temp": 80}, {"name": "TUE", "temp": 82},
-                             {"name": "WED", "temp": 79}, {"name": "THU", "temp": 77}]}
+                    "hourly": [{"name": "8P", "temp": 80}, {"name": "9P", "temp": 82},
+                              {"name": "10P", "temp": 79}, {"name": "11P", "temp": 77},
+                              {"name": "12A", "temp": 75}]}
     row_start_calls.clear()
     col_calls.clear()
     rcenter._draw_weather(
@@ -2810,7 +2985,7 @@ def main():
         orig_fcol(_CenterID.Draw(Image.new("RGB", (1, 1))), 0, entry,
                  narrow_font, narrow_row_h, "F",
                  content_top=narrow_row_h + 1, measure_only=True)
-        for entry in wide_weather["daily"]
+        for entry in wide_weather["hourly"]
     )
     expected_wide_shift = max(0, (header_w - wide_total_w) // 2)
     actual_wide_shift = col_calls[0] - row_start_calls[0]
@@ -2838,16 +3013,16 @@ def main():
     # which an absolute-position bug could not produce.
     row_probe = _CenterID.Draw(Image.new("RGB", (1, 1)))
     row_font, row_row_h = rcenter._fit_font(row_probe, 4, rcenter.height)
-    row_entries = [{"name": "MON", "temp": 80}, {"name": "TUE", "temp": 82}]
+    row_entries = [{"name": "8P", "temp": 80}, {"name": "9P", "temp": 82}]
     width_at_2 = rcenter._draw_forecast_row(
         Image.new("RGB", (300, 32), (0, 0, 0)),
         _CenterID.Draw(Image.new("RGB", (300, 32), (0, 0, 0))),
-        2, row_entries, "4 DAY FORECAST", row_font, row_row_h, "F",
+        2, row_entries, "Next Hours", row_font, row_row_h, "F",
         content_top=row_row_h + 1)
     width_at_100 = rcenter._draw_forecast_row(
         Image.new("RGB", (300, 32), (0, 0, 0)),
         _CenterID.Draw(Image.new("RGB", (300, 32), (0, 0, 0))),
-        100, row_entries, "4 DAY FORECAST", row_font, row_row_h, "F",
+        100, row_entries, "Next Hours", row_font, row_row_h, "F",
         content_top=row_row_h + 1)
     assert width_at_2 == width_at_100, (
         f"_draw_forecast_row's return value must not depend on the "
@@ -2856,18 +3031,18 @@ def main():
         f"instead of a width"
     )
     assert width_at_2 < 100, (
-        f"a two-column forecast row under 'NEXT HOURS'-sized content "
+        f"a two-column forecast row under 'Next Hours'-sized content "
         f"should not measure anywhere near 100px wide: {width_at_2}px"
     )
     print(f"PASS  _draw_forecast_row returns a width independent of its "
           f"starting x ({width_at_2}px at both x=2 and x=100)")
 
-    # "NEXT HOURS"/"4 DAY FORECAST" used to sit at the same top margin the
-    # column's own day/hour label independently anchored to, using a
-    # different (larger) font -- header and content competing for the same
-    # rows rather than one sitting above the other. The header's own text
-    # row must now end (or at least not start later than) the row the
-    # column's label starts on.
+    # "Next Hours" used to sit at the same top margin the column's own
+    # day/hour label independently anchored to, using a different (larger)
+    # font -- header and content competing for the same rows rather than
+    # one sitting above the other. The header's own text row must now end
+    # (or at least not start later than) the row the column's label starts
+    # on.
     from PIL import ImageDraw as _HeaderID
     class _HeaderSpyDraw:
         def __init__(self, inner):
@@ -2900,23 +3075,23 @@ def main():
     header_img = Image.new("RGB", (250, 32), (0, 0, 0))
     header_spy = _HeaderSpyDraw(_HeaderID.Draw(header_img))
     header_font, header_row_h = rheader._fit_font(header_spy, 4, rheader.height)
-    header_weather = {"label": "BAYONNE", "units": "F", "now_temp": 78,
+    header_weather = {"label": "Bayonne", "units": "F", "now_temp": 78,
                       "now_condition": "CLEAR", "alerts": [],
-                      "daily": [{"name": "WED", "temp": 86, "condition": "Sunny"},
-                               {"name": "THU", "temp": 85, "condition": "Clear"}]}
+                      "hourly": [{"name": "8P", "temp": 86, "condition": "Sunny"},
+                                {"name": "9P", "temp": 85, "condition": "Clear"}]}
     rheader._draw_weather(header_img, header_spy, 2, header_weather,
                          header_font, header_row_h)
-    header_ys = [y for y, t in header_spy.calls if t == "4 DAY FORECAST"]
-    label_ys = [y for y, t in header_spy.calls if t in ("WED", "THU")]
+    header_ys = [y for y, t in header_spy.calls if t == "Next Hours"]
+    label_ys = [y for y, t in header_spy.calls if t in ("8P", "9P")]
     assert header_ys and label_ys, (
-        f"expected both the header and a day label to draw text: "
+        f"expected both the header and an hour label to draw text: "
         f"{header_spy.calls}"
     )
     assert min(label_ys) > min(header_ys), (
-        f"the day label should start on a row strictly below the header, "
+        f"the hour label should start on a row strictly below the header, "
         f"not share its row: header_y={header_ys}, label_y={label_ys}"
     )
-    print(f"PASS  '4 DAY FORECAST' header sits above its columns' own day "
+    print(f"PASS  'Next Hours' header sits above its columns' own hour "
           f"labels (header y={min(header_ys)}, column y={min(label_ys)}), "
           f"not sharing a row with them")
 
@@ -2998,7 +3173,7 @@ def main():
     # scrolling strip with no space pressure forcing a code a viewer has to
     # decode.
     weather_src = inspect.getsource(StripRenderer._draw_weather)
-    assert "FEELS LIKE" in weather_src, "feels-like label was not spelled out"
+    assert "Feels Like" in weather_src, "feels-like label was not spelled out"
     assert '"FL ' not in weather_src, "the old abbreviated form is still present"
     print("PASS  feels-like temperature is spelled out in full, not abbreviated")
 
@@ -3008,8 +3183,8 @@ def main():
     import moon_phase
     from datetime import timedelta as _moon_td
     valid_names = {
-        "NEW MOON", "WAXING CRESCENT", "FIRST QUARTER", "WAXING GIBBOUS",
-        "FULL MOON", "WANING GIBBOUS", "LAST QUARTER", "WANING CRESCENT",
+        "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
+        "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent",
     }
     probe_start = _dt(2026, 1, 1)
     seen_names = set()
@@ -3087,12 +3262,9 @@ def main():
 
     # show_forecast=False (weather.hide_forecast_when_live, opted into per
     # install) drops the hourly column and the moon phase, but current
-    # conditions and the 4-day forecast must still draw -- current
-    # conditions on the same reasoning that already keeps a weather
-    # warning up during a live game, the 4-day forecast because it's
-    # brief enough not to compete for the same space a live score needs.
-    forecast_weather = dict(moon_weather, hourly=[{"name": "8P", "temp": 77}],
-                            daily=[{"name": "MON", "temp": 80}])
+    # conditions must still draw -- the same reasoning that already keeps
+    # a weather warning up during a live game.
+    forecast_weather = dict(moon_weather, hourly=[{"name": "8P", "temp": 77}])
     # 2pm, deliberately inside the hourly-forecast's own 6am-8pm daytime
     # window (tested separately below) so this test is only about
     # show_forecast, not confounded by that other cutoff.
@@ -3111,25 +3283,11 @@ def main():
         f"show_forecast=False should drop the hourly forecast and moon "
         f"columns: shown={shown_w}px, hidden={hidden_w}px"
     )
-
-    # The 4-day forecast specifically must survive show_forecast=False --
-    # dropping only "daily" from the same weather dict, at the same
-    # show_forecast=False, must measure narrower still, proving the 4-day
-    # columns were part of what was left in hidden_w above.
-    no_daily_weather = dict(forecast_weather)
-    del no_daily_weather["daily"]
-    hidden_no_daily_w = rmoonw._draw_weather(
-        Image.new("RGB", (250, 32), (0, 0, 0)), _MoonID.Draw(
-            Image.new("RGB", (250, 32), (0, 0, 0))),
-        2, no_daily_weather, moon_font, moon_row_h,
-        _dt(2026, 8, 12, 14, 0), show_forecast=False)
-    assert hidden_no_daily_w < hidden_w, (
-        f"the 4-day forecast should still be present even with "
-        f"show_forecast=False: with_daily={hidden_w}px, "
-        f"without_daily={hidden_no_daily_w}px"
+    assert hidden_w > 0, (
+        "current conditions should still draw with show_forecast=False"
     )
     print(f"PASS  show_forecast=False hides the hourly forecast and moon "
-          f"phase but keeps current conditions and the 4-day forecast up "
+          f"phase but keeps current conditions up "
           f"({shown_w}px -> {hidden_w}px)")
 
     # show_current=False hides the icon and plain current-temperature
@@ -3138,7 +3296,7 @@ def main():
     # all, so it stays up, using the icon+single-line treatment the
     # temperature would otherwise get rather than sitting paired under a
     # hidden number. A spy on the actual text draws is the direct check
-    # here -- width alone can't distinguish "78F" from "FEELS LIKE 85F".
+    # here -- width alone can't distinguish "78F" from "Feels Like 85F".
     class _TextSpyDraw:
         def __init__(self, inner):
             self.inner = inner
@@ -3152,7 +3310,7 @@ def main():
             return getattr(self.inner, name)
 
     feels_weather = {"now_temp": 78, "now_feels": 85, "units": "F",
-                     "now_condition": "Clear", "label": "BAYONNE"}
+                     "now_condition": "Clear", "label": "Bayonne"}
 
     def _draw(weather, show_current):
         img = Image.new("RGB", (250, 32), (0, 0, 0))
@@ -3163,7 +3321,7 @@ def main():
 
     current_texts, current_w = _draw(feels_weather, True)
     feels_texts, feels_w = _draw(feels_weather, False)
-    assert "78F" in current_texts and "FEELS LIKE 85F" in current_texts, (
+    assert "78F" in current_texts and "Feels Like 85F" in current_texts, (
         f"show_current=True should draw both the plain temperature and "
         f"feels-like: {current_texts}"
     )
@@ -3171,7 +3329,7 @@ def main():
         f"show_current=False must not draw the plain current temperature: "
         f"{feels_texts}"
     )
-    assert "FEELS LIKE 85F" in feels_texts, (
+    assert "Feels Like 85F" in feels_texts, (
         f"show_current=False must still draw feels-like: {feels_texts}"
     )
     assert feels_w > 0
@@ -3183,10 +3341,10 @@ def main():
     # the header -- narrower than with show_current=True, and still
     # within the shared margin (nothing drawn out of bounds).
     plain_weather = {"now_temp": 78, "units": "F", "now_condition": "Clear",
-                     "label": "BAYONNE"}
+                     "label": "Bayonne"}
     plain_texts, plain_w = _draw(plain_weather, False)
     _, plain_with_current_w = _draw(plain_weather, True)
-    assert plain_texts == ["BAYONNE"], (
+    assert plain_texts == ["Bayonne"], (
         f"with no feels-like data, show_current=False should draw only "
         f"the header: {plain_texts}"
     )
@@ -3207,10 +3365,10 @@ def main():
     print(f"PASS  show_current=False with no feels-like data at all "
           f"collapses to just the header ({plain_w}px), still within margin")
 
-    # The hourly ("NEXT HOURS") column has its own separate 6am-8pm cutoff,
+    # The hourly ("Next Hours") column has its own separate 6am-8pm cutoff,
     # unrelated to show_forecast -- an hour-by-hour forecast stops earning
-    # its place once it's mostly covering overnight. The 4-day forecast and
-    # moon phase are unaffected either way.
+    # its place once it's mostly covering overnight. The moon phase is
+    # unaffected either way.
     #
     # Isolated as with-hourly-data minus without, at the *same* moment each
     # time -- moon illumination is a continuous function of the exact
@@ -3220,8 +3378,8 @@ def main():
     # and failed for the wrong reason. Holding `when` fixed within each
     # comparison cancels the moon out, leaving only the hourly column's
     # own contribution.
-    daily_only = dict(forecast_weather)
-    del daily_only["hourly"]
+    baseline_weather = dict(forecast_weather)
+    del baseline_weather["hourly"]
 
     def _hourly_contribution(when):
         with_hourly = rmoonw._draw_weather(
@@ -3232,7 +3390,7 @@ def main():
         without_hourly = rmoonw._draw_weather(
             Image.new("RGB", (250, 32), (0, 0, 0)), _MoonID.Draw(
                 Image.new("RGB", (250, 32), (0, 0, 0))),
-            2, daily_only, moon_font, moon_row_h, when, show_forecast=True)
+            2, baseline_weather, moon_font, moon_row_h, when, show_forecast=True)
         return with_hourly - without_hourly
 
     day_delta = _hourly_contribution(_dt(2026, 8, 12, 14, 0))    # 2pm
@@ -3260,7 +3418,7 @@ def main():
     )
     print(f"PASS  hourly forecast column only shows 6am-8pm "
           f"(contributes {day_delta}px by day, {night_delta}px overnight), "
-          f"4-day forecast and moon unaffected")
+          f"moon unaffected")
 
     # Countdown: pure date arithmetic, recurring every year. Must roll over
     # to next year once this year's date has passed, and must not crash on
@@ -3325,8 +3483,8 @@ def main():
     print(f"PASS  countdown icon draws something for every case tried: "
           f"{icon_cases}")
 
-    # The strip segment: a two-row block, "N DAYS" above "TO <NAME>" below,
-    # "TODAY!" when it is actually the day, all within the shared margin.
+    # The strip segment: a two-row block, "N Days" above "To <Name>" below,
+    # "Today!" when it is actually the day, all within the shared margin.
     rcd = StripRenderer(FakeDisplay(192, 32), {}, log)
     cd_probe_img = Image.new("RGB", (1, 1))
     cd_probe_draw = _MoonID.Draw(cd_probe_img)
@@ -3355,11 +3513,11 @@ def main():
 
     today_draw.text = _spy_text
     rcd._draw_countdown(today_img, today_draw, 2, "CHRISTMAS", 0, cd_font, cd_row_h)
-    assert "TODAY!" in today_spy, (
-        f"days=0 should read as TODAY!, not '0 DAYS': {today_spy}"
+    assert "Today!" in today_spy, (
+        f"days=0 should read as Today!, not '0 Days': {today_spy}"
     )
     print(f"PASS  countdown strip segment renders within the shared margin "
-          f"({cd_w}px) and reads TODAY! on the day itself")
+          f"({cd_w}px) and reads Today! on the day itself")
 
     # build_strip() must only add the countdown section when events are
     # actually passed, and the cache signature must change when the day
@@ -3416,7 +3574,7 @@ def main():
 
     center_rows = [{"rank": i, "short_name": f"P.{i}", "team": "NYY",
                     "value": "41"} for i in range(1, 4)]
-    center_weather = {"label": "BAYONNE", "units": "F", "now_temp": 78,
+    center_weather = {"label": "Bayonne", "units": "F", "now_temp": 78,
                       "now_feels": 85, "now_condition": "CLEAR", "alerts": []}
     center_team = {"abbr": "NYY", "league": "mlb", "name": "Yankees"}
     center_final = {"id": "cf1", "league": "mlb", "state": STATE_FINAL,
@@ -3424,7 +3582,7 @@ def main():
                     "away": {"abbr": "NYY", "score": "4", "winner": False},
                     "home": {"abbr": "NYY", "score": "7", "winner": True},
                     "situation": {}, "leaders": [
-                        {"team": "NYY", "name": "A.JUDGE", "line": "2-4, HR",
+                        {"team": "NYY", "name": "A.Judge", "line": "2-4, HR",
                          "side": "batting"}]}
 
     from datetime import datetime as _center_dt
@@ -3546,17 +3704,17 @@ def main():
 
     tmvp_rows = {
         ("homeRuns", "al"): [
-            {"rank": 1, "name": "Rafael Devers", "short_name": "R.DEVERS",
+            {"rank": 1, "name": "Rafael Devers", "short_name": "R.Devers",
              "team": "BOS", "value": "38", "player_id": "d1"},
-            {"rank": 2, "name": "Aaron Judge", "short_name": "A.JUDGE",
+            {"rank": 2, "name": "Aaron Judge", "short_name": "A.Judge",
              "team": "NYY", "value": "35", "player_id": "j1"},
         ],
         ("battingAverage", "al"): [
-            {"rank": 1, "name": "Aaron Judge", "short_name": "A.JUDGE",
+            {"rank": 1, "name": "Aaron Judge", "short_name": "A.Judge",
              "team": "NYY", "value": ".312", "player_id": "j1"},
         ],
         ("runsBattedIn", "al"): [
-            {"rank": 3, "name": "Ben Rice", "short_name": "B.RICE",
+            {"rank": 3, "name": "Ben Rice", "short_name": "B.Rice",
              "team": "NYY", "value": "70", "player_id": "r1"},
         ],
     }
@@ -3565,7 +3723,7 @@ def main():
     tmvp_awards = BaseballAwardsManager(log, stub_leaders)
 
     best = tmvp_awards.team_best("NYY", "al")
-    assert best is not None and best["short_name"] == "A.JUDGE", (
+    assert best is not None and best["short_name"] == "A.Judge", (
         f"expected NYY's own best (ranks in 2 categories) over a player "
         f"who only ranks in 1: {best}"
     )
@@ -3587,7 +3745,7 @@ def main():
     from PIL import ImageDraw as _TmvpID
     tmvp_draw = _TmvpID.Draw(tmvp_img)
     tmvp_font, tmvp_row_h = rtmvp._fit_font(tmvp_draw, 4, rtmvp.height)
-    rtmvp._draw_team_mvp(tmvp_img, tmvp_draw, 2, "Aaron Judge", "A.JUDGE",
+    rtmvp._draw_team_mvp(tmvp_img, tmvp_draw, 2, "Aaron Judge", "A.Judge",
                         "AVG .312  HR 35  RBI 88", tmvp_font, tmvp_row_h)
     tpx = tmvp_img.load()
     tlit = [(x, y) for y in range(32) for x in range(150) if tpx[x, y] != (0, 0, 0)]
@@ -3616,7 +3774,7 @@ def main():
 
     long_line_img = Image.new("RGB", (150, 32), (0, 0, 0))
     long_line_spy = _SpyDraw(_TmvpID.Draw(long_line_img))
-    rtmvp._draw_team_mvp(long_line_img, long_line_spy, 2, "Aaron Judge", "A.JUDGE",
+    rtmvp._draw_team_mvp(long_line_img, long_line_spy, 2, "Aaron Judge", "A.Judge",
                         "AVG .312  HR 35  RBI 88", tmvp_font, tmvp_row_h)
     assert "Aaron Judge" in long_line_spy.calls, (
         f"a stat line wider than the short name should show the full name: "
@@ -3625,9 +3783,9 @@ def main():
 
     short_line_img = Image.new("RGB", (150, 32), (0, 0, 0))
     short_line_spy = _SpyDraw(_TmvpID.Draw(short_line_img))
-    rtmvp._draw_team_mvp(short_line_img, short_line_spy, 2, "Aaron Judge", "A.JUDGE",
+    rtmvp._draw_team_mvp(short_line_img, short_line_spy, 2, "Aaron Judge", "A.Judge",
                         "HR 35", tmvp_font, tmvp_row_h)
-    assert "A.JUDGE" in short_line_spy.calls and "Aaron Judge" not in short_line_spy.calls, (
+    assert "A.Judge" in short_line_spy.calls and "Aaron Judge" not in short_line_spy.calls, (
         f"a stat line narrower than the short name should keep the "
         f"abbreviation: {short_line_spy.calls}"
     )
@@ -3659,7 +3817,7 @@ def main():
     tmvp_plugin.teams_leader_scopes = ["al", "nl"]
     mvps = tmvp_plugin._team_mvps()
     assert mvps.get("NYY") == {
-        "name": "Aaron Judge", "short_name": "A.JUDGE",
+        "name": "Aaron Judge", "short_name": "A.Judge",
         "line": "AVG .312  HR 35  RBI 88",
     }, (
         f"unexpected team MVP output: {mvps}"
@@ -3681,14 +3839,14 @@ def main():
         "p1": {"ERA": "5.50", "W": "3", "K": "40"},        # much worse ERA
         "p2": {"ERA": "1.80", "W": "9", "K": "150"},        # ace-level
     }
-    roster_names = {"h1": "A.JUDGE", "h2": "B.BENCH", "h3": "C.ROLE",
-                    "p1": "D.SWINGMAN", "p2": "E.ACE"}
+    roster_names = {"h1": "A.Judge", "h2": "B.Bench", "h3": "C.Role",
+                    "p1": "D.Swingman", "p2": "E.Ace"}
     roster_full_names = {"h1": "Aaron Judge", "h2": "Bobby Bench", "h3": "Charlie Role",
                           "p1": "Danny Swingman", "p2": "Eddie Ace"}
     roster_awards = BaseballAwardsManager(log, None)
     roster_best = roster_awards.team_mvp_from_roster(
         roster_hitting, roster_pitching, roster_names, roster_full_names)
-    assert roster_best is not None and roster_best["short_name"] == "A.JUDGE", (
+    assert roster_best is not None and roster_best["short_name"] == "A.Judge", (
         f"clear statistical standout did not win the roster MVP: {roster_best}"
     )
     assert roster_best["name"] == "Aaron Judge", (
@@ -3699,7 +3857,7 @@ def main():
     # the hitter winning on breadth or raw point volume regardless.
     pitching_only = roster_awards.team_mvp_from_roster(
         {}, roster_pitching, roster_names, roster_full_names)
-    assert pitching_only is not None and pitching_only["short_name"] == "E.ACE", (
+    assert pitching_only is not None and pitching_only["short_name"] == "E.Ace", (
         f"lower ERA should rank first, not last: {pitching_only}"
     )
     print("PASS  team_mvp_from_roster() finds a standout from raw roster "
@@ -3736,7 +3894,7 @@ def main():
     fallback_plugin.teams_leader_scopes = ["al", "nl"]
     fallback_mvps = fallback_plugin._team_mvps()
     assert fallback_mvps.get("NYY") == {
-        "name": "Aaron Judge", "short_name": "A.JUDGE",
+        "name": "Aaron Judge", "short_name": "A.Judge",
         "line": "AVG .312  HR 35  RBI 88",
     }, f"roster fallback did not produce the expected MVP: {fallback_mvps}"
     print("PASS  _team_mvps() falls back to a roster-ranked MVP when a "
@@ -3770,7 +3928,7 @@ def main():
     # content, isolating this test to the gating logic in _display_strip()
     # rather than the real leaderboard-computation pipeline tested
     # elsewhere.
-    lb_rows = [{"rank": 1, "short_name": "A.JUDGE", "team": "NYY", "value": "35"}]
+    lb_rows = [{"rank": 1, "short_name": "A.Judge", "team": "NYY", "value": "35"}]
     lb_plugin = LocalScoreboardPlugin(
         "local-scoreboard", {"teams": [{"abbr": "NYY", "league": "mlb", "name": "Yankees"}]},
         FakeDisplay(192, 32), FakeCache(), None,
@@ -3778,7 +3936,7 @@ def main():
     lb_plugin.games = GamesManager(log, teams=[
         {"abbr": "NYY", "league": "mlb", "name": "Yankees"}])
     lb_plugin._leaderboards = lambda: (
-        [("AL HR LEADERS", lb_rows, "HR")], [("AL MVP WATCH", lb_rows)])
+        [("AL HR Leaders", lb_rows, "HR")], [("AL MVP Watch", lb_rows)])
     lb_plugin.teams_leaderboards_on = True
     # Not what this test is about -- with only one followed team, pinning
     # its own live game to the static panel would absorb it entirely,
@@ -3800,7 +3958,7 @@ def main():
     lb_plugin2.games = GamesManager(log, teams=[
         {"abbr": "NYY", "league": "mlb", "name": "Yankees"}])
     lb_plugin2._leaderboards = lambda: (
-        [("AL HR LEADERS", lb_rows, "HR")], [("AL MVP WATCH", lb_rows)])
+        [("AL HR Leaders", lb_rows, "HR")], [("AL MVP Watch", lb_rows)])
     lb_plugin2.teams_leaderboards_on = True
     lb_plugin2.teams_panel_on = False
     lb_plugin2.games._games = [{
@@ -3831,7 +3989,7 @@ def main():
     lb_plugin3.games = GamesManager(log, teams=[
         {"abbr": "NYY", "league": "mlb", "name": "Yankees"}])
     lb_plugin3._leaderboards = lambda: (
-        [("AL HR LEADERS", lb_rows, "HR")], [("AL MVP WATCH", lb_rows)])
+        [("AL HR Leaders", lb_rows, "HR")], [("AL MVP Watch", lb_rows)])
     lb_plugin3.teams_leaderboards_on = True
     lb_plugin3.teams_panel_on = False
     # Followed team's own game is upcoming, not live -- has_live() alone
@@ -4002,7 +4160,7 @@ def main():
         {"abbr": "NYY", "league": "mlb", "name": "Yankees"}])
     urgent_plugin.teams_panel_on = False
     urgent_plugin._leaderboards = lambda: (
-        [("AL HR LEADERS", lb_rows, "HR")], [("AL MVP WATCH", lb_rows)])
+        [("AL HR Leaders", lb_rows, "HR")], [("AL MVP Watch", lb_rows)])
     urgent_plugin.teams_leaderboards_on = True
     urgent_plugin.games._games = [{
         "id": "urg1", "league": "mlb", "state": STATE_UPCOMING, "start": "",
@@ -4149,7 +4307,7 @@ def main():
     ])
     panel_urgent.teams_panel_priority = ["NYY"]
     panel_urgent._leaderboards = lambda: (
-        [("AL HR LEADERS", lb_rows, "HR")], [("AL MVP WATCH", lb_rows)])
+        [("AL HR Leaders", lb_rows, "HR")], [("AL MVP Watch", lb_rows)])
     panel_urgent.teams_leaderboards_on = True
     panel_urgent.games._games = [{
         "id": "pu1", "league": "mlb", "state": STATE_UPCOMING, "start": "",
@@ -4196,7 +4354,7 @@ def main():
           "still triggers the same out-of-turn adopt as any other live "
           "game, not just ones that stay in the scroll")
 
-    # ---- 6. Plugin lifecycle -------------------------------------------
+    # ---- 6. Plugin Lifecycle -------------------------------------------
     plugin_display = FakeDisplay(192, 32)
     plugin = LocalScoreboardPlugin("local-scoreboard", {}, plugin_display, FakeCache(), None)
     plugin.games = gm
@@ -4288,6 +4446,361 @@ def main():
     plugin._mode_started[MODE_TEAMS] = time.time() - 999
     assert plugin.is_cycle_complete(), "plugin never releases the panel"
     print("PASS  live games take priority; the visit cap releases the panel")
+
+    # Single followed team whose only game is pinned to the static panel:
+    # teams_and_games used to go empty and _display_strip returned False
+    # without calling draw_strip, so the panel never painted -- even when
+    # other-live games were available for the scroll.
+    panel_only = LocalScoreboardPlugin(
+        "local-scoreboard", {"teams": [
+            {"abbr": "NYG", "league": "nfl", "name": "Giants", "rivals": ["DAL"]},
+        ],
+         "static_panel": {"enabled": True, "width": 64, "priority": ["NYG"]},
+         "other_live_games": {"enabled": True, "limit": 5}},
+        FakeDisplay(192, 32), FakeCache(), None,
+    )
+    panel_only.games = GamesManager(log, teams=[
+        {"abbr": "NYG", "league": "nfl", "name": "Giants"},
+    ])
+    panel_only.teams_panel_on = True
+    panel_only.teams_panel_width = 64
+    panel_only.teams_panel_priority = ["NYG"]
+    panel_only.teams_other_live_on = True
+    panel_only.teams_other_live_limit = 5
+    panel_only.games._games = [{
+        "id": "po1", "league": "nfl", "state": STATE_LIVE, "start": "",
+        "status_detail": "Q2 3:12",
+        "home": {"abbr": "NYG", "score": "14"},
+        "away": {"abbr": "PHI", "score": "10"},
+        "situation": {"kind": "football", "down_distance": "2nd & 5",
+                      "yard_line": "PHI 28", "possession": "NYG",
+                      "red_zone": False, "clock": "3:12"},
+        "leaders": [],
+    }, {
+        "id": "po2", "league": "nfl", "state": STATE_LIVE, "start": "",
+        "status_detail": "Q1 8:00",
+        "home": {"abbr": "SEA", "score": "7"},
+        "away": {"abbr": "SF", "score": "3"},
+        "situation": {"kind": "football", "down_distance": "1st & 10",
+                      "yard_line": "SF 25", "possession": "SEA",
+                      "red_zone": False, "clock": "8:00"},
+        "leaders": [],
+    }]
+    assert panel_only._display_strip(), (
+        "panel-pinned only followed live game must still draw (panel + "
+        "other-live on the scroll), not return False with nothing painted"
+    )
+    assert panel_only.strip._static_panel is not None
+    assert panel_only.display_manager.frames, (
+        "draw_strip must have pushed a frame when the panel is the only "
+        "followed content"
+    )
+    print("PASS  panel-only followed live still paints (with other-live "
+          "on the scroll)")
+
+    # Leaders team map: a failed first fetch must not freeze empty forever.
+    from leaders_data_source import MLBStatsLeadersSource
+    src_teams = MLBStatsLeadersSource(log)
+    src_teams.session = type("S", (), {
+        "get": staticmethod(lambda *a, **k: (_ for _ in ()).throw(
+            RuntimeError("boom"))),
+    })()
+    src_teams._load_teams()
+    assert src_teams._team_abbrs is None, (
+        "failed team-map fetch must leave _team_abbrs as None so the next "
+        f"call retries, not a sticky empty dict: {src_teams._team_abbrs!r}"
+    )
+    class _OkTeamsResp:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"teams": [{"id": 147, "abbreviation": "NYY"}]}
+    src_teams.session = type("S", (), {
+        "get": staticmethod(lambda *a, **k: _OkTeamsResp()),
+    })()
+    assert src_teams._team_abbr(147) == "NYY"
+    print("PASS  leaders team-map retries after a failed first fetch")
+
+    # Forecast/hourly temps must honor configured units (station obs already did).
+    from weather_source import NWSWeather
+    assert NWSWeather._convert_temp(77, "F", "C") == 25
+    assert NWSWeather._convert_temp(25, "C", "F") == 77
+    assert NWSWeather._convert_temp(77, "F", "F") == 77
+    wx = NWSWeather(log, 40.66, -74.11, units="C")
+    wx._grid = {
+        "forecast": "https://example/forecast",
+        "hourly": "https://example/hourly",
+        "stations": "",
+        "city": "Bayonne",
+    }
+    def _wx_get(url, params=None):
+        if url.endswith("/forecast") or "forecast" in url and "Hourly" not in url:
+            return {"properties": {"periods": [
+                {"name": "Today", "shortForecast": "Sunny",
+                 "temperature": 77, "temperatureUnit": "F"},
+                {"name": "Tonight", "shortForecast": "Clear",
+                 "temperature": 59, "temperatureUnit": "F"},
+            ]}}
+        if "hourly" in url.lower() or url.endswith("/hourly"):
+            return {"properties": {"periods": [
+                {"startTime": "2026-08-15T20:00:00-04:00",
+                 "temperature": 72, "temperatureUnit": "F",
+                 "shortForecast": "Clear"},
+            ]}}
+        return None
+    wx._get = _wx_get
+    wx._fetch_current = lambda grid: {}
+    wx._fetch_alerts = lambda: []
+    got = wx.fetch()
+    assert got["temp"] == 25 and got["temp_unit"] == "C", got
+    assert got["next_temp"] == 15, got
+    assert got["hourly"][0]["temp"] == 22, got["hourly"]
+    print("PASS  weather forecast/hourly temps convert when units=C")
+
+    # Partial league fetch failure must not wipe other leagues' good data.
+    gpartial = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"},
+        {"abbr": "NYK", "league": "nba", "name": "Knicks"},
+    ])
+    gpartial._games = [{
+        "id": "keep-mlb", "league": "mlb", "state": STATE_FINAL, "start": "",
+        "home": {"abbr": "NYY", "score": "5"}, "away": {"abbr": "BOS", "score": "3"},
+        "situation": {}, "leaders": [],
+    }, {
+        "id": "old-nba", "league": "nba", "state": STATE_FINAL, "start": "",
+        "home": {"abbr": "NYK", "score": "99"}, "away": {"abbr": "BOS", "score": "90"},
+        "situation": {}, "leaders": [],
+    }]
+    class PartialStub:
+        def fetch_scoreboard(self, league, **kwargs):
+            if league == "mlb":
+                return None  # request failed
+            if league == "nba":
+                return [{
+                    "id": "new-nba", "league": "nba", "state": STATE_LIVE,
+                    "start": "", "home": {"abbr": "NYK", "score": "10"},
+                    "away": {"abbr": "BOS", "score": "8"},
+                    "situation": {}, "leaders": [],
+                }]
+            return []
+        def fetch_leaders(self, *a, **k): return []
+        def fetch_batting(self, *a, **k): return []
+    gpartial.source = PartialStub()
+    gpartial.fetch_leaders = False
+    gpartial.refresh(force=True)
+    ids = {g["id"] for g in gpartial._games}
+    assert "keep-mlb" in ids, f"failed MLB fetch wiped prior Yankees game: {ids}"
+    assert "new-nba" in ids, f"successful NBA fetch did not land: {ids}"
+    assert "old-nba" not in ids, f"stale NBA final should have been replaced: {ids}"
+    print("PASS  partial league fetch failure keeps prior games for that league")
+
+    # Far-future throttle must not stamp on a failed fetch (None).
+    gfar = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"},
+        {"abbr": "NYK", "league": "nba", "name": "Knicks"},
+    ])
+    far_tries = []
+    class FarFailStub:
+        def fetch_scoreboard(self, league, days_back=1, days_forward=7):
+            if days_forward > 7:
+                far_tries.append(league)
+                return None
+            if league == "mlb":
+                return [{
+                    "id": "mlb1", "league": "mlb", "state": STATE_FINAL,
+                    "start": "", "home": {"abbr": "NYY", "score": "5"},
+                    "away": {"abbr": "BOS", "score": "3"},
+                    "situation": {}, "leaders": [],
+                }]
+            return []
+        def fetch_leaders(self, *a, **k): return []
+        def fetch_batting(self, *a, **k): return []
+    gfar.source = FarFailStub()
+    gfar.fetch_leaders = False
+    # Call the wide lookup directly -- refresh() only reaches it when at
+    # least one followed game already exists in the normal window.
+    gfar._games = [{
+        "id": "mlb1", "league": "mlb", "state": STATE_FINAL, "start": "",
+        "home": {"abbr": "NYY", "score": "5"}, "away": {"abbr": "BOS", "score": "3"},
+        "situation": {}, "leaders": [],
+    }]
+    gfar._find_far_future_games(gfar._team_index(), gfar._games)
+    assert "nba" not in gfar._next_game_checked, (
+        "failed far-future lookup must not start the 24h throttle"
+    )
+    assert far_tries == ["nba"], far_tries
+    gfar._find_far_future_games(gfar._team_index(), gfar._games)
+    assert far_tries == ["nba", "nba"], (
+        f"failed far-future lookup should retry, not wait 24h: {far_tries}"
+    )
+    print("PASS  far-future lookup retries after failure instead of 24h throttle")
+
+    # Refresh gate: in-flight no-op must not burn _last_update.
+    gate_plugin = LocalScoreboardPlugin(
+        "local-scoreboard",
+        {"teams": [{"abbr": "NYY", "league": "mlb", "name": "Yankees"}]},
+        FakeDisplay(192, 32), FakeCache(), None,
+    )
+    gate_plugin.games = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"},
+    ])
+    gate_plugin.games._games = [{
+        "id": "g1", "league": "mlb", "state": STATE_LIVE, "start": "",
+        "home": {"abbr": "NYY", "score": "1"}, "away": {"abbr": "BOS", "score": "0"},
+        "situation": {}, "leaders": [],
+    }]
+    gate_plugin.games._fetched_at = time.time()
+    gate_plugin._refresh_in_flight = True
+    before = time.time() - 100
+    gate_plugin._last_update = before
+    gate_plugin.teams_live_interval = 5
+    gate_plugin.update()
+    assert gate_plugin._last_update == before, (
+        "in-flight refresh must not advance _last_update (would double the "
+        f"live interval): was {before}, now {gate_plugin._last_update}"
+    )
+    gate_plugin._refresh_in_flight = False
+    gate_plugin.update()
+    assert gate_plugin._last_update > before, (
+        "a real dispatch must still advance _last_update"
+    )
+    gate_plugin._wait_for_background_update(timeout=2.0)
+    print("PASS  refresh gate does not burn the interval on an in-flight no-op")
+
+    # ESPN↔StatsAPI abbr aliases for streaks and roster id lookup.
+    gstreak = GamesManager(log, teams=[{"abbr": "ARI", "league": "mlb"}])
+    gstreak._streaks = {"AZ": "W4"}
+    assert gstreak.streak_for({"abbr": "ARI"}) == "W4", (
+        "streak_for must resolve ARI via AZ alias"
+    )
+    print("PASS  streak_for resolves ESPN/StatsAPI abbreviation aliases")
+
+    src_alias = MLBStatsLeadersSource(log)
+    src_alias._team_abbrs = {109: "AZ"}
+    src_alias._team_ids = {"AZ": 109}
+    assert src_alias._team_id("ARI") == 109, (
+        "roster lookup must resolve ARI to StatsAPI AZ id"
+    )
+    print("PASS  leaders _team_id resolves ESPN abbr aliases to StatsAPI ids")
+
+    info_ver = LocalScoreboardPlugin(
+        "local-scoreboard",
+        {"teams": [{"abbr": "NYY", "league": "mlb", "name": "Yankees"}]},
+        FakeDisplay(192, 32), FakeCache(), None,
+    ).get_info()["version"]
+    man_ver = json.load(open(os.path.join(
+        os.path.dirname(__file__), "manifest.json")))["version"]
+    assert info_ver == man_ver, (
+        f"get_info version {info_ver!r} must match manifest {man_ver!r}"
+    )
+    print(f"PASS  get_info version matches manifest ({man_ver})")
+
+    # Other-live density filters.
+    gdense = GamesManager(log, teams=[
+        {"abbr": "NYY", "league": "mlb", "name": "Yankees"},
+    ])
+    gdense._other_live = [
+        {"id": "m1", "league": "mlb", "state": STATE_LIVE,
+         "home": {"abbr": "BOS"}, "away": {"abbr": "TOR"}},
+        {"id": "n1", "league": "nfl", "state": STATE_LIVE,
+         "home": {"abbr": "DAL"}, "away": {"abbr": "SEA"}},
+        {"id": "n2", "league": "nfl", "state": STATE_LIVE,
+         "home": {"abbr": "KC"}, "away": {"abbr": "BUF"}},
+    ]
+    only_mlb = gdense.other_live_games(
+        limit=10, followed_leagues_only=True, per_league_limit=0)
+    assert [g["id"] for g in only_mlb] == ["m1"], only_mlb
+    capped = gdense.other_live_games(
+        limit=10, followed_leagues_only=False, per_league_limit=1)
+    assert len(capped) == 2 and {g["league"] for g in capped} == {"mlb", "nfl"}, capped
+    print("PASS  other-live followed_leagues_only and per_league_limit filter")
+
+    # Rivalry live boost duplicates the live rivalry card on the strip.
+    rboost = StripRenderer(FakeDisplay(192, 32), {}, log)
+    team_boost = {"abbr": "NYG", "league": "nfl", "name": "Giants",
+                  "rivals": ["DAL"]}
+    rival_live = {
+        "id": "rb1", "league": "nfl", "state": STATE_LIVE, "start": "",
+        "status_detail": "Q2", "away": {"abbr": "DAL", "score": "14"},
+        "home": {"abbr": "NYG", "score": "10"},
+        "situation": {"kind": "football", "down_distance": "1st & 10",
+                      "yard_line": "DAL 40", "possession": "NYG",
+                      "red_zone": False},
+        "leaders": [],
+    }
+    strip0 = rboost.build_strip([(team_boost, [rival_live])], rivalry_live_boost=0)
+    strip1 = StripRenderer(FakeDisplay(192, 32), {}, log).build_strip(
+        [(team_boost, [rival_live])], rivalry_live_boost=1)
+    assert strip1.width > strip0.width, (
+        f"rivalry_live_boost=1 should widen the strip: "
+        f"{strip0.width} -> {strip1.width}"
+    )
+    print("PASS  rivalry_live_boost widens the strip for live rivalry games")
+
+    # NFL live strip + static panel regression goldens (ink / width checks).
+    golden_dir = os.path.join(tempfile.gettempdir(), "local_scoreboard_golden")
+    os.makedirs(golden_dir, exist_ok=True)
+    nfl_live = {
+        "id": "dal-sea", "league": "nfl", "state": STATE_LIVE, "period": 2,
+        "status_detail": "Q2 5:43", "start": "",
+        "away": {"abbr": "DAL", "score": "14"},
+        "home": {"abbr": "SEA", "score": "7"},
+        "situation": {"kind": "football", "down_distance": "1st & 10",
+                      "yard_line": "SEA 35", "possession": "DAL",
+                      "red_zone": False, "clock": "5:43"},
+        "leaders": [],
+    }
+    rgold = StripRenderer(FakeDisplay(192, 32), {}, log)
+    gimg = Image.new("RGB", (400, 32), (0, 0, 0))
+    from PIL import ImageDraw as _GID
+    gdraw = _GID.Draw(gimg)
+    gfont, grow = rgold._fit_font(gdraw, 3, 32)
+    gw = rgold._draw_game(gimg, gdraw, 2, nfl_live, gfont, grow)
+    gink = 0
+    gpx = gimg.load()
+    for _x in range(gimg.width):
+        for _y in range(32):
+            if sum(gpx[_x, _y]) > 30:
+                gink = _x
+    assert gw + 2 >= gink, (
+        f"NFL live strip game undercounts width: returned {gw}, ink {gink}"
+    )
+    crop = gimg.crop((0, 0, gw + 4, 32))
+    crop.save(os.path.join(golden_dir, "nfl_other_live_192x32.png"))
+    panel = rgold.render_static_panel(nfl_live, "DAL", 64)
+    assert panel is not None
+    panel.save(os.path.join(golden_dir, "nfl_static_panel_64x32.png"))
+    print(f"PASS  NFL live strip/panel regression goldens written to {golden_dir}")
+
+    # Soccer scorers from summary keyEvents.
+    soccer_summary = {
+        "header": {"competitions": [{"competitors": [
+            {"team": {"id": "83", "abbreviation": "BAR"}},
+            {"team": {"id": "86", "abbreviation": "RMA"}},
+        ]}]},
+        "keyEvents": [
+            {"scoringPlay": False, "type": {"text": "Kickoff"}, "participants": []},
+            {"scoringPlay": True, "type": {"text": "Goal"},
+             "clock": {"displayValue": "23'"},
+             "team": {"id": "83"},
+             "participants": [{"athlete": {"displayName": "Robert Lewandowski"}}]},
+            {"scoringPlay": True, "type": {"text": "Goal"},
+             "clock": {"displayValue": "67'"},
+             "team": {"id": "86"},
+             "participants": [{"athlete": {"displayName": "Kylian Mbappe"}}]},
+        ],
+    }
+    scorers = ESPNGamesSource._parse_soccer_scorers(soccer_summary, per_game=2)
+    assert len(scorers) == 2, scorers
+    assert scorers[0]["name"] == "R.Lewandowski", scorers
+    assert scorers[0]["category"] == "GOAL" and scorers[0]["team"] == "BAR"
+    assert scorers[1]["name"] == "K.Mbappe" and scorers[1]["team"] == "RMA"
+    print("PASS  soccer keyEvents yield GOAL scorers for notable performers")
+
+    # Weather schema default matches code Title Case.
+    schema = json.load(open(os.path.join(
+        os.path.dirname(__file__), "config_schema.json")))
+    assert schema["properties"]["weather"]["properties"]["label"]["default"] == "Bayonne"
+    print("PASS  weather label schema default is Title Case Bayonne")
 
     # A broken init must degrade rather than raise
     original = LocalScoreboardPlugin._build_components

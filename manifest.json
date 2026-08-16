@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.50.0",
+  "version": "0.58.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,61 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.58.0",
+      "released": "2026-08-16",
+      "notes": "Improvements: other-live density controls (followed_leagues_only, per_league_limit); rivalry live boost (extra strip passes + slower scroll while a configured rivalry is live); soccer notable performers from summary keyEvents (goal scorers); weather label schema default Title Case Bayonne; NFL live strip/panel regression coverage."
+    },
+    {
+      "version": "0.57.3",
+      "released": "2026-08-16",
+      "notes": "Medium-priority hardening: refresh gate no longer burns live_interval when a fetch is already in flight; far-future next-game lookup only throttles after a successful response; a failed league scoreboard fetch keeps that league's prior games instead of wiping them; standings streaks walk nested conference→division children; ESPN/StatsAPI abbr aliases apply to streaks, rivalry flags, and roster MVP ids; on_config_change waits for in-flight work and copies other-live/streaks/far-future cache; get_info version reads manifest.json."
+    },
+    {
+      "version": "0.57.2",
+      "released": "2026-08-15",
+      "notes": "Four high-priority fixes: (1) when the static panel absorbs the only followed headline game, the strip still paints -- panel + other-live -- instead of returning False with nothing drawn; (2) La Liga crest downloads remap laliga to ESPN's soccer CDN folder; (3) StatsAPI team-map load retries after a failed first fetch instead of freezing empty for the process lifetime; (4) forecast/hourly temps convert when units=C (station obs already did)."
+    },
+    {
+      "version": "0.57.1",
+      "released": "2026-08-15",
+      "notes": "Fix NFL other-live overlap on the strip: football live detail drew the yard line on the second row but did not reserve width for it, so the next segment painted through spots like 'SEA 35' (seen on DAL@SEA). Yard line now stacks under possession/down and the returned width is the wider of the two rows."
+    },
+    {
+      "version": "0.57.0",
+      "released": "2026-08-14",
+      "notes": "Player names -- the live-game batter and pitcher, notable performers, team MVP notes, leaderboard rows -- switch from 'A.JUDGE' to 'A.Judge'. One shared function (espn_data_source.py's abbreviate_name) produces all of these, so this is a single change with the same effect everywhere the abbreviated form appears, not a per-segment one. The original all-caps choice was deliberate, for legibility at seven pixels beside a score -- confirmed on the Pi this still reads clearly at the real panel size with the new casing."
+    },
+    {
+      "version": "0.56.0",
+      "released": "2026-08-14",
+      "notes": "Root-caused a real, reported freeze -- the panel would visibly stick every few seconds while any game was live. The host framework holds a per-plugin lock for the whole duration of that plugin's update() call and skips its display() entirely while update() is still running, showing the last pushed frame instead of a new one; update() used to do its actual work (fetch followed teams' games, other-live games league-wide, their leaders, streaks, season leaders, weather) inline, which is genuine network I/O. Measured directly against the Pi during a busy day (9 other-live games, 6 followed teams): games.refresh() alone took roughly 1 second, every single live_interval (5s) -- meaning the display was frozen for around a fifth of every five seconds the whole time any game was live, worse the more games were live at once. update() now dispatches that entire body of work to a background thread and returns in under 1ms regardless of how long the fetch actually takes, confirmed against the same live workload. A thread is enough here (not a separate process, unlike strip composition in 0.49.0) because a network call releases the GIL while it waits, so this costs the render loop nothing. Single-flight guarded, so a slow network day can't pile up overlapping fetches. GamesManager.refresh() itself stays fully synchronous and untouched -- every test that already depended on it finishing before returning still holds -- this wraps the call from manager.py instead, the same relationship strip_renderer.py's background dispatch already has to its own compose step."
+    },
+    {
+      "version": "0.55.0",
+      "released": "2026-08-14",
+      "notes": "The 4-day forecast section is removed from the strip entirely -- current conditions and the hourly ('Next Hours') column are what's left of weather beyond the moon phase. weather_source.py no longer builds or fetches the five-day list at all (_condense_daily and the 'daily' field are gone), not just hidden from display. The daily forecast NWS endpoint itself is still called, since its first period still supplies current-conditions' 'now'/'period' fields -- only the multi-day list built from the rest of that response is gone."
+    },
+    {
+      "version": "0.54.0",
+      "released": "2026-08-14",
+      "notes": "Found the real reason the weather city label kept coming back ALL CAPS even after 0.52.0 and a matching config.json edit: weather_source.py's own fetch() unconditionally .upper()'d the label when building the weather dict it hands to the renderer, independent of whatever case the config or the renderer's own defaults used -- a separate forced-uppercase call from the ones already fixed, so those earlier fixes couldn't have touched it. Removed. Also: the forecast column's label/icon/temperature now sit with a full 2px gap between each instead of 1px, breathing room confirmed by rendering both and comparing rather than guessed at -- but only when a font strictly smaller than the shared body font was actually found for that column. The worst case (no such font available, falling back to the shared body font) still uses the original 1px gap, because confirmed on the Pi, 2px there pushes the icon below its own minimum-size floor and it stops drawing at all -- a regression the existing 'still draws an icon when no smaller font is found' test caught immediately."
+    },
+    {
+      "version": "0.53.0",
+      "released": "2026-08-14",
+      "notes": "The '4 Day Forecast' / 'Next Hours' section header now draws in a font strictly smaller than the day/temp columns beneath it, the same way it already reads as a label rather than equal-billing content everywhere else on the strip -- it was sharing the shared body font with its own columns, which read as too heavy for a one-line label over a short row. The columns' own font, and the weather icon's size, are unchanged: real hardware only has two font sizes to choose from here, and sizing the day/temp text up to match would have shrunk the icon from ~14px to ~5px, likely past the point of reading as any specific condition -- left alone on purpose after measuring the actual tradeoff rather than guessing at it. A user's own countdown event names and weather city label, both free text typed into config rather than code, are unaffected by any of this -- 0.52.0 stopped forcing those to ALL CAPS, but an existing install's config.json already had them saved that way from before, so this device's own saved values were updated by hand to match, not by any code path new installs also go through automatically."
+    },
+    {
+      "version": "0.52.0",
+      "released": "2026-08-14",
+      "notes": "Rounding out 0.51.0's Title Case pass, plus a real production bug it exposed: team names on the strip banner and the weather header's default city label were also still forced to ALL CAPS via an explicit .upper() call -- both now show whatever case the config/data actually provides ('Yankees', not 'YANKEES'; the default weather label is now 'Bayonne'). The countdown segment's 'N DAYS' / 'TO <name>' text is now 'N Days' / 'To <name>'. The 'Live' section banner for other-live games drops its 'Around The League' subtitle entirely, back to a single centred row. The static clock/weather panel now reads 24-hour time ('19:05'); the scrolling strip's own clock (shown only while a live game has taken over that panel's slot) keeps 12-hour ('7:05P') -- these are two different call sites, changed independently on purpose. Separately: background strip composition (the separate-process worker from 0.49.0) started throwing 'Can't pickle _compose_worker_main: not the same object as strip_renderer._compose_worker_main' on the live service, undetected until now because verifying it needed watching journalctl for a couple of minutes past the load line, not just confirming a clean load. Root cause: the host framework deliberately removes the plugin's own bare 'strip_renderer' key from sys.modules after loading (renaming it to a namespaced key, so two different plugins that both ship a same-named file don't collide) -- correct for the framework in general, but it breaks multiprocessing's spawn method, which pickles a Process target by (module_name, qualname) and verifies the lookup against sys.modules at pickle time. Fixed by capturing a reference to this module at import time (while the bare key still exists) and briefly restoring it in sys.modules for just the synchronous window Process.start() actually pickles in, then removing it again immediately after. An old, pre-rename 'nyc-teams' plugin folder with its own stale copy of strip_renderer.py was also found still present on the Pi and removed, per this repo's own long-standing note that doing so is safe once a new deploy is confirmed working -- a real collision risk in its own right even though it turned out not to be this bug's actual cause."
+    },
+    {
+      "version": "0.51.0",
+      "released": "2026-08-13",
+      "notes": "Every on-screen section title, status label and forecast header switched from ALL CAPS to Title Case -- 'FINAL' to 'Final', 'AWARDS WATCH' to 'Awards Watch', 'NEXT HOURS'/'4 DAY FORECAST' to 'Next Hours'/'4 Day Forecast', moon phase names, 'FEELS LIKE' to 'Feels Like', and more -- while genuine acronyms (MVP, HR, AL, NL, ROY) stay as-is. This surfaced a real, previously-latent bug: _text_top/_text_bottom (the helpers that position text so its ink lands on an exact row) compensated for this font's leading using a digit's own bounding box as a stand-in for whatever text was actually being drawn, which works only when the real text is also all-caps or numeric -- a digit and a cap letter share the same ink-top in this font, but a lowercase ascender or dot does not. Every display string on this strip had been all-caps until now, so the mismatch had no chance to surface before. Caught immediately by the existing 'final game: margins top/bottom' test the moment 'FINAL' became 'Final': the status text's ink poked a pixel above its row, right at the panel's own top edge. Both helpers now take the actual text being positioned and measure its own real leading instead of guessing from a digit. Confirmed visually on the Pi against real BDF fonts, not just the sandbox's fallback font, before and after."
+    },
     {
       "version": "0.50.0",
       "released": "2026-08-13",
