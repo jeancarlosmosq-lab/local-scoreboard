@@ -236,185 +236,183 @@ SPRITE_ORDER: Tuple[str, ...] = (
 )
 
 # Original kid archetypes -- handmade stand-ins for popular vibes.
-# Inspired by plumber / dino-buddy / block-miner / speedy / spark /
-# rescue-pup / ice kid / web hero tropes -- NOT licensed characters
-# (no Mario, Yoshi, Luigi, Minecraft, Pokemon, Sonic, etc.).
-# All fly with depth (scale up mid-screen, shrink at the edges).
+# Colors lean toward the familiar looks kids know; shapes stay original
+# (no logos / mustaches / trademarked marks). All fly with depth.
 FLYERS: Dict[str, Tuple[Grid, ...]] = {
-    # Hard-hat plumber with a wrench.
+    # Plumber -- red hat/shirt, blue overalls, brown shoes (Mario colors).
     "plumber": (
         (
-            (_, Y, Y, Y, _, _),
-            (Y, N, N, N, Y, _),
+            (_, R, R, R, _, _),
+            (R, N, N, N, R, _),
             (_, W, N, W, _, _),
-            (_, B, B, B, O, O),
-            (_, B, B, B, _, O),
-            (B, _, _, B, _, _),
+            (_, B, Y, B, _, _),
+            (_, B, B, B, _, _),
+            (N, _, _, _, N, _),
         ),
         (
-            (_, Y, Y, Y, _, _),
-            (Y, N, N, N, Y, _),
+            (_, R, R, R, _, _),
+            (R, N, N, N, R, _),
             (_, W, N, W, _, _),
-            (O, O, B, B, B, _),
-            (O, _, B, B, B, _),
-            (_, B, _, _, B, _),
+            (_, B, Y, B, _, _),
+            (_, B, B, B, _, _),
+            (_, N, _, N, _, _),
         ),
     ),
-    # Second helper -- teal beanie + plunger (not a green-hat twin).
+    # Helper -- green hat/shirt, blue overalls (Luigi colors).
     "helper": (
         (
-            (_, T, T, T, _, _),
-            (T, N, N, N, T, _),
+            (_, G, G, G, _, _),
+            (G, N, N, N, G, _),
             (_, W, N, W, _, _),
-            (_, G, G, G, P, _),
-            (_, G, G, G, P, _),
-            (G, _, _, G, _, _),
+            (_, B, Y, B, _, _),
+            (_, B, B, B, _, _),
+            (N, _, _, _, N, _),
         ),
         (
-            (_, T, T, T, _, _),
-            (T, N, N, N, T, _),
+            (_, G, G, G, _, _),
+            (G, N, N, N, G, _),
             (_, W, N, W, _, _),
-            (P, G, G, G, _, _),
-            (P, G, G, G, _, _),
-            (_, G, _, _, G, _),
+            (_, B, Y, B, _, _),
+            (_, B, B, B, _, _),
+            (_, N, _, N, _, _),
         ),
     ),
-    # Friendly green dino buddy with an orange belly (not a long-nose saddle dino).
+    # Chomp -- green body, cream belly, red shoes (Yoshi colors).
     "chomp": (
         (
             (_, _, G, G, _, _),
             (_, G, W, G, G, _),
-            (G, G, G, O, G, _),
-            (_, G, O, O, _, _),
-            (G, _, _, _, G, _),
+            (G, G, G, W, G, _),
+            (_, G, W, W, _, _),
+            (R, _, _, _, R, _),
         ),
         (
             (_, G, G, _, _, _),
             (G, W, G, G, _, _),
-            (G, G, O, G, G, _),
-            (_, O, O, G, _, _),
-            (_, G, _, _, G, _),
+            (G, G, W, G, G, _),
+            (_, W, W, G, _, _),
+            (_, R, _, R, _, _),
         ),
     ),
-    # Blocky digger -- square head, pickaxe (not a Mojang skin).
+    # Digger -- brown hair, teal shirt, blue pants (Steve colors).
     "digger": (
         (
             (_, N, N, N, _, K),
             (N, W, N, W, N, K),
-            (_, P, P, P, _, K),
+            (_, T, T, T, _, K),
             (_, B, B, B, _, _),
-            (B, _, _, _, B, _),
+            (N, _, _, _, N, _),
         ),
         (
             (K, _, N, N, N, _),
             (K, N, W, N, W, N),
-            (K, _, P, P, P, _),
+            (K, _, T, T, T, _),
             (_, _, B, B, B, _),
-            (_, B, _, _, _, B),
+            (_, N, _, _, _, N),
         ),
     ),
-    # Round yellow spark critter with a bolt (not a pocket monster).
+    # Spark -- yellow body, red cheeks, dark ear tips (Pikachu colors).
     "spark": (
         (
-            (_, _, Y, _, _, _),
+            (K, _, Y, _, K, _),
             (_, Y, W, Y, _, _),
-            (Y, Y, Y, Y, Y, _),
-            (_, C, Y, C, _, _),
+            (Y, R, Y, R, Y, _),
+            (_, Y, Y, Y, _, _),
             (Y, _, _, _, Y, _),
         ),
         (
-            (_, Y, _, Y, _, _),
+            (_, K, Y, K, _, _),
             (_, Y, W, Y, _, _),
-            (Y, Y, Y, Y, Y, _),
-            (_, C, Y, C, _, _),
+            (Y, R, Y, R, Y, _),
+            (_, Y, Y, Y, _, _),
             (_, Y, _, Y, _, _),
         ),
     ),
-    # Speedy cyan runner with orange kicks (not a ring-collecting hedgehog).
+    # Dasher -- blue body, peach muzzle, red shoes (Sonic colors).
     "dasher": (
         (
-            (_, C, C, C, _, _),
-            (C, W, C, W, C, _),
-            (_, C, C, C, _, _),
-            (C, C, C, C, C, _),
-            (O, _, _, _, O, _),
+            (_, B, B, B, _, _),
+            (B, W, B, W, B, _),
+            (_, B, W, B, _, _),
+            (B, B, B, B, B, _),
+            (R, W, _, W, R, _),
         ),
         (
-            (_, C, C, C, _, _),
-            (C, W, C, W, C, _),
-            (_, C, C, C, _, _),
-            (C, C, C, C, C, _),
-            (_, O, _, O, _, _),
+            (_, B, B, B, _, _),
+            (B, W, B, W, B, _),
+            (_, B, W, B, _, _),
+            (B, B, B, B, B, _),
+            (_, R, W, R, _, _),
         ),
     ),
-    # Square sea buddy with bubbles (not a licensed sponge).
+    # Bubbly -- yellow square, brown pants, red tie (SpongeBob colors).
     "bubbly": (
         (
             (_, Y, Y, Y, _, _),
             (Y, W, Y, W, Y, _),
             (Y, Y, R, Y, Y, _),
-            (_, O, O, O, _, _),
-            (C, _, _, _, C, _),
+            (W, W, W, W, W, _),
+            (_, N, N, N, _, _),
         ),
         (
             (_, Y, Y, Y, _, _),
             (Y, W, Y, W, Y, _),
             (Y, Y, R, Y, Y, _),
-            (_, O, O, O, _, _),
-            (_, C, _, C, _, _),
+            (W, W, W, W, W, _),
+            (N, _, N, _, N, _),
         ),
     ),
-    # Rescue pup with a badge (not a branded patrol).
+    # Pup -- blue coat + badge (Chase-style rescue colors).
     "pup": (
         (
             (N, _, _, _, N, _),
             (_, N, N, N, _, _),
             (N, W, N, W, N, _),
-            (_, N, R, N, _, _),
-            (N, _, _, _, N, _),
+            (_, B, Y, B, _, _),
+            (B, _, _, _, B, _),
         ),
         (
             (_, N, _, N, _, _),
             (_, N, N, N, _, _),
             (N, W, N, W, N, _),
-            (_, N, R, N, _, _),
-            (_, N, _, _, N, _),
-        ),
-    ),
-    # Icy kid with a scarf (not a movie ice princess).
-    "frost": (
-        (
-            (_, C, C, C, _, _),
-            (C, W, N, W, C, _),
-            (_, N, N, N, _, _),
-            (P, P, B, P, P, _),
-            (_, B, B, B, _, _),
-            (B, _, _, _, B, _),
-        ),
-        (
-            (C, _, C, _, C, _),
-            (C, W, N, W, C, _),
-            (_, N, N, N, _, _),
-            (P, P, B, P, P, _),
-            (_, B, B, B, _, _),
+            (_, B, Y, B, _, _),
             (_, B, _, B, _, _),
         ),
     ),
-    # Purple/orange web hero (not a red-and-blue wall-crawler).
-    "webkid": (
+    # Frost -- icy blonde hair, ice-blue dress (Elsa colors).
+    "frost": (
         (
-            (_, P, P, P, _, _),
-            (P, W, P, W, P, _),
-            (_, P, O, P, _, _),
-            (P, P, P, P, P, _),
-            (O, _, _, _, O, _),
+            (_, W, C, W, _, _),
+            (W, W, N, W, W, _),
+            (_, W, N, W, _, _),
+            (C, C, C, C, C, _),
+            (_, C, C, C, _, _),
+            (C, _, _, _, C, _),
         ),
         (
-            (_, P, P, P, _, _),
-            (P, W, P, W, P, _),
-            (_, P, O, P, _, _),
-            (P, P, P, P, P, _),
-            (_, O, _, O, _, _),
+            (W, _, C, _, W, _),
+            (W, W, N, W, W, _),
+            (_, W, N, W, _, _),
+            (C, C, C, C, C, _),
+            (_, C, C, C, _, _),
+            (_, C, _, C, _, _),
+        ),
+    ),
+    # Webkid -- red & blue suit (Spider-Man colors).
+    "webkid": (
+        (
+            (_, R, R, R, _, _),
+            (R, W, R, W, R, _),
+            (_, R, B, R, _, _),
+            (B, B, R, B, B, _),
+            (R, _, _, _, R, _),
+        ),
+        (
+            (_, R, R, R, _, _),
+            (R, W, R, W, R, _),
+            (_, R, B, R, _, _),
+            (B, B, R, B, B, _),
+            (_, R, _, R, _, _),
         ),
     ),
 }
