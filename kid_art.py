@@ -858,9 +858,55 @@ def blit_flyer(draw, x: int, y: int, flyer_id: str, scale: int = 2,
     return sprite.size
 
 
+def _flyer_route(cycle_i: int, panel_w: int, panel_h: int,
+                 fw: int, fh: int
+                 ) -> Tuple[float, float, float, float]:
+    """Pick an entry→exit route for this flight.
+
+    Returns (x0, y0, x1, y1) in panel pixels; start/end sit just off-screen
+    so the bird flies in from one place and leaves through another. Routes
+    are tuned so a short 32px panel still sees most of the flight.
+    """
+    # Just off each edge (partially visible soon after entry).
+    top = float(-max(4, fh // 3))
+    bot = float(panel_h - fh + max(4, fh // 3))
+    left = float(-max(4, fw // 3))
+    right = float(panel_w - fw + max(4, fw // 3))
+    y_hi = float(max(0, min(panel_h - fh, int(panel_h * 0.08))))
+    y_mid = float(max(0, (panel_h - fh) // 2))
+    y_lo = float(max(0, min(panel_h - fh, int(panel_h * 0.58))))
+    x_l = float(max(0, int(panel_w * 0.08)))
+    x_m = float(max(0, (panel_w - fw) // 2))
+    x_r = float(max(0, min(panel_w - fw, int(panel_w * 0.78))))
+
+    routes: Tuple[Tuple[float, float, float, float], ...] = (
+        # Across — different heights / exit lanes.
+        (left, y_mid, right, y_mid),
+        (right, y_hi, left, y_hi),
+        (left, y_lo, right, y_lo),
+        (right, y_mid, left, y_lo),
+        # Diagonals.
+        (left, y_hi, right, y_lo),
+        (right, y_lo, left, y_hi),
+        (left, y_lo, right, y_hi),
+        (right, y_hi, left, y_lo),
+        # Dive / climb with horizontal drift (stay on-panel longer).
+        (x_l, top, x_r, bot),
+        (x_r, bot, x_l, top),
+        (x_m, top, right, y_lo),
+        (left, y_hi, x_m, bot),
+        # Corner skims.
+        (left, top, right, y_mid),
+        (right, top, left, y_lo),
+        (left, bot, right, y_hi),
+        (right, bot, left, y_mid),
+    )
+    return routes[cycle_i % len(routes)]
+
+
 def apply_flyer(img, t: float, interval: float = 10.0,
                 flight: float = 2.8) -> Optional[str]:
-    """Soft-shaded subjects fly across with depth (closer mid-screen)."""
+    """Soft-shaded birds fly in from varied edges and exit elsewhere."""
     try:
         from PIL import Image as _Im
     except ImportError:  # pragma: no cover
@@ -879,32 +925,34 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     progress = local / flight
     frame = int(local * 10) % 2
 
+    # Depth: bigger mid-flight (closest), smaller at the ends.
     depth = math.sin(progress * math.pi)
-    if cycle_i % 2 == 1:
+    if cycle_i % 3 == 2:
         depth = max(0.15, min(1.0, 0.35 + 0.65 * (1.0 - progress)))
 
-    # Target on-panel height: ~12px far → ~26px close.
     fh = max(12, min(h - 2, 12 + int(round(depth * (min(26, h - 2) - 12)))))
     sprite = render_flyer(flyer_id, fh, frame=frame, progress=progress)
     if sprite is None:
         return None
     fw, fh = sprite.size
 
-    going_right = (cycle_i % 2 == 0)
-    travel = w + fw + 4
-    if going_right:
-        x = int(-fw + progress * travel)
-    else:
-        x = int(w - progress * travel)
-        # Face travel direction: flip horizontal when going left.
-        sprite = sprite.transpose(_FLIP_LR)
+    x0, y0, x1, y1 = _flyer_route(cycle_i, w, h, fw, fh)
+    t_ease = progress * progress * (3.0 - 2.0 * progress)
+    x = x0 + (x1 - x0) * t_ease
+    y = y0 + (y1 - y0) * t_ease
+    if cycle_i % 4 == 1:
+        y -= math.sin(progress * math.pi) * (3 + fh // 8)
+    elif cycle_i % 4 == 3:
+        y += math.sin(progress * math.pi) * (2 + fh // 10)
 
-    bob = int(round(math.sin(progress * math.pi * 3) * (1 + fh // 10)))
-    if flyer_id in ("hawk", "eagle", "pelican", "seagull", "crow", "goose"):
-        bob = int(round(math.sin(progress * math.pi * 5) * (1 + fh // 12)))
-    elif flyer_id == "hummingbird":
+    bob = int(round(math.sin(progress * math.pi * 5) * (1 + fh // 14)))
+    if flyer_id == "hummingbird":
         bob = int(round(math.sin(progress * math.pi * 9) * (2 + fh // 10)))
-    y = max(0, min(h - fh, (h - fh) // 2 + bob))
+    x = int(round(x))
+    y = int(round(y + bob))
+
+    if (x1 - x0) < 0:
+        sprite = sprite.transpose(_FLIP_LR)
 
     if img.mode != "RGBA":
         layer = _Im.new("RGBA", img.size, (0, 0, 0, 0))
@@ -914,6 +962,8 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     else:
         img.paste(sprite, (x, y), sprite)
     return flyer_id
+
+
 
 
 

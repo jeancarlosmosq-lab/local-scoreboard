@@ -4757,6 +4757,21 @@ def main():
     lit_mid = sum(1 for y in range(32) for x in range(192)
                   if mid.getpixel((x, y)) != (0, 0, 0))
     assert lit_mid > lit_edge, (lit_edge, lit_mid)
+    # Routes vary: different cycles enter from different places.
+    corners = []
+    for i in range(16):
+        stamp = Image.new("RGB", (192, 32), (0, 0, 0))
+        assert _kid_art.apply_flyer(
+            stamp, i * 10 + 0.55, interval=10, flight=2.8) is not None
+        xs = [x for y in range(32) for x in range(192)
+              if stamp.getpixel((x, y)) != (0, 0, 0)]
+        ys = [y for y in range(32) for x in range(192)
+              if stamp.getpixel((x, y)) != (0, 0, 0)]
+        assert xs and ys
+        corners.append((min(xs) < 40, min(ys) < 10, max(xs) > 150))
+    assert len(set(corners)) >= 3, corners
+    routes = {_kid_art._flyer_route(i, 192, 32, 40, 16) for i in range(16)}
+    assert len(routes) == 16
     picks = _kid_art.pick_sprites(15, count=2)
     assert len(picks) == 2 and picks[0] != picks[1]
     rfun = StripRenderer(
