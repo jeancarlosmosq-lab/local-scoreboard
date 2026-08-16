@@ -16,6 +16,7 @@ The live segment is sport-specific because what a fan watches for is:
     baseball    a diamond with the runners, the count, the outs
     football    down and distance, and who has the ball
     basketball  the period and the clock
+    soccer      the live minute
 
 Rendering is a composite: the strip is built once, cached against its data,
 and each frame is a crop. Rebuilding a 600px image every frame would be
@@ -824,6 +825,16 @@ class StripRenderer:
             if row1 > col or row2 > col:
                 x = max(row1, row2) + 6
 
+        elif kind == "soccer":
+            # Minute beside the crests. Status often already carries "67'",
+            # but other-live cards and thin status strings benefit from the
+            # same explicit live-detail slot football/baseball use.
+            clock = situation.get("clock") or game.get("clock") or ""
+            if clock:
+                text = self._safe(clock)
+                draw.text((x, top), text, font=font, fill=self.LIVE)
+                x += self._measure(draw, text, font)[0] + 6
+
         # Basketball carries nothing beyond the clock, which the status line
         # already shows, so it adds no segment of its own.
         return max(0, x - start)
@@ -1517,7 +1528,12 @@ class StripRenderer:
         text_row_h = smaller[1] if smaller else row_h
 
         label = self._safe(entry.get("name", ""))
-        temp = f"{entry.get('temp')}{unit}"
+        # Daily columns may carry a paired overnight low; hourly never does.
+        # "82/65" fits the small font better than repeating the unit twice.
+        if entry.get("low") is not None and entry.get("temp") is not None:
+            temp = f"{entry.get('temp')}/{entry.get('low')}"
+        else:
+            temp = f"{entry.get('temp')}{unit}"
 
         lw = self._measure(draw, label, text_font)[0]
         tw = self._measure(draw, temp, text_font)[0]
@@ -2517,6 +2533,8 @@ class StripRenderer:
             if kind in ("football", "basketball") and situation.get("clock"):
                 status = self._safe(
                     f"Q{game.get('period', '')} {situation['clock']}".strip())
+            elif kind == "soccer" and situation.get("clock"):
+                status = self._safe(situation["clock"])
             draw.text((1, row_y(0, sample=status)), status, font=font, fill=self.LIVE)
 
             # Rows 1 and 2: crest, abbreviation, score right-aligned.

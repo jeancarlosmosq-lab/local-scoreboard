@@ -168,24 +168,32 @@ class NWSWeather:
         return out
 
     def _condense_daily(self, periods, days: int = 5) -> List[Dict]:
-        """Daytime periods only, as a multi-day outlook.
+        """Daytime highs (and matching overnight lows) as a multi-day outlook.
 
         NWS alternates day and night periods, so taking the first N
         outright would give half-days. Only the daytime ones carry the
-        high, which is what a 4-day forecast means to a reader. Labels
-        are three-letter Title Case ("Mon") to match the strip's casing.
+        high; the following night period (when present) supplies the low.
+        Labels are three-letter Title Case ("Mon") to match the strip.
         """
         out = []
-        for period in periods:
+        for index, period in enumerate(periods):
             if not period.get("isDaytime"):
                 continue
             raw = (period.get("name") or "")[:3]
             name = (raw[:1].upper() + raw[1:].lower()) if raw else ""
             src_unit = period.get("temperatureUnit", "F")
+            high = self._convert_temp(
+                period.get("temperature"), src_unit, self.units)
+            low = None
+            if index + 1 < len(periods) and not periods[index + 1].get("isDaytime"):
+                night = periods[index + 1]
+                night_unit = night.get("temperatureUnit", src_unit)
+                low = self._convert_temp(
+                    night.get("temperature"), night_unit, self.units)
             out.append({
                 "name": name,
-                "temp": self._convert_temp(
-                    period.get("temperature"), src_unit, self.units),
+                "temp": high,
+                "low": low,
                 "condition": (period.get("shortForecast") or ""),
             })
             if len(out) >= days:

@@ -570,10 +570,25 @@ class ESPNGamesSource:
         Each sport has its own: baseball has the count, the outs and who is
         on base; football has down and distance and who has the ball;
         basketball has the clock and the period, and little else that changes
-        fast enough to be worth a line. ESPN carries all of it in the same
-        "situation" block, with different fields populated per sport.
+        fast enough to be worth a line. Soccer has no ESPN "situation"
+        object -- the minute and half live on the status block instead.
         """
         situation = comp.get("situation") or {}
+        status = comp.get("status") or {}
+
+        if league == "laliga":
+            # Soccer competitions omit "situation" entirely; the live minute
+            # still belongs beside the crests the way a basketball clock does.
+            clock = ascii_fold(status.get("displayClock") or "")
+            period = status.get("period") or 0
+            if not clock and not period:
+                return {}
+            return {
+                "kind": "soccer",
+                "clock": clock,
+                "period": period,
+            }
+
         if not situation:
             return {}
 
@@ -623,9 +638,7 @@ class ESPNGamesSource:
                     break
             return {
                 "kind": "football",
-                "clock": ascii_fold(
-                    (comp.get("status") or {}).get("displayClock", "")
-                ),
+                "clock": ascii_fold(status.get("displayClock", "")),
                 # ESPN gives both a long and a short form; the short one is
                 # what fits: "3rd & 7" rather than "3rd and 7 at NYG 42".
                 "down_distance": ascii_fold(
@@ -639,7 +652,7 @@ class ESPNGamesSource:
 
         return {
             "kind": "basketball",
-            "clock": ascii_fold((comp.get("status") or {}).get("displayClock", "")),
+            "clock": ascii_fold(status.get("displayClock", "")),
         }
 
     @staticmethod

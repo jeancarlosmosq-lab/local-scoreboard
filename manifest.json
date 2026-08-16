@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.59.0",
+  "version": "0.60.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.60.0",
+      "released": "2026-08-16",
+      "notes": "Polish: soccer live minute beside crests; NFL/NBA/soccer summary performers enrich finals even when the scoreboard only had a composite rating (and empty misses retry); 4-day forecast columns show high/low (82/65). Pair with config: other-live followed_leagues_only + per_league_limit, rivalry dwell, Christmas/New Year countdowns."
+    },
     {
       "version": "0.59.0",
       "released": "2026-08-16",

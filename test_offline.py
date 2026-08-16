@@ -154,16 +154,12 @@ def main():
     assert soccer[0]["state"] == STATE_LIVE
     assert soccer[0]["home"]["abbr"] == "BAR"
     assert soccer[0]["clock"] == "67'"
-    # ESPN's soccer competitions carry no "situation" object at all, unlike
-    # baseball and football -- confirmed against a real live-shaped
-    # payload. Nothing should try to draw a live-detail segment for it,
-    # the same as basketball already draws nothing beyond the clock.
-    assert soccer[0]["situation"] == {}, (
-        f"soccer should parse to an empty situation, not invent one: "
-        f"{soccer[0]['situation']}"
-    )
+    # Soccer has no ESPN "situation" object; we still surface the minute as
+    # a soccer live-detail so the strip can draw it beside the crests.
+    assert soccer[0]["situation"].get("kind") == "soccer", soccer[0]["situation"]
+    assert soccer[0]["situation"].get("clock") == "67'", soccer[0]["situation"]
     print("PASS  the same parser handles a soccer (La Liga) payload too, "
-          "with no situation object to draw a live-detail segment from")
+          "with a soccer live-detail minute")
 
     # ---- 2. Names ------------------------------------------------------
     assert abbreviate_name("Aaron Judge") == "A.Judge"
@@ -4646,8 +4642,56 @@ def main():
     ], days=4)
     assert len(condensed) == 2, condensed
     assert condensed[0]["name"] == "Mon" and condensed[0]["temp"] == 25, condensed
+    assert condensed[0]["low"] == 15, condensed
     assert condensed[1]["name"] == "Tue" and condensed[1]["temp"] == 27, condensed
+    assert condensed[1].get("low") is None, condensed
     print("PASS  daily forecast condenses daytime highs with unit convert")
+
+    # NFL/NBA: scoreboard RAT alone must not block a summary enrich, and an
+    # empty miss must not stamp the final forever.
+    gperf = GamesManager(log, teams=[
+        {"abbr": "NYG", "league": "nfl", "name": "Giants"},
+    ])
+    gperf.fetch_leaders = True
+    gperf.leaders_per_game = 2
+    gperf._games = [{
+        "id": "nfl-final", "league": "nfl", "state": STATE_FINAL, "start": "",
+        "home": {"abbr": "NYG", "score": "24", "winner": True},
+        "away": {"abbr": "DAL", "score": "17", "winner": False},
+        "situation": {}, "leaders": [
+            {"team": "NYG", "name": "D.Jones", "line": "rating",
+             "category": "", "side": "batting"},
+        ],
+    }]
+    class _NflLeaders:
+        def fetch_batting(self, *a, **k):
+            return []
+        def fetch_leaders(self, league, event_id, per_game=2):
+            return [{
+                "team": "NYG", "name": "D.Jones",
+                "line": "24-31, 305 YDS, 3 TD",
+                "category": "PASS", "side": "batting",
+            }]
+    gperf.source = _NflLeaders()
+    gperf._refresh_leaders()
+    cats = {l.get("category") for l in gperf._games[0]["leaders"]}
+    assert "PASS" in cats, gperf._games[0]["leaders"]
+    assert f"nfl:nfl-final" in gperf._leaders_fetched
+    # Empty miss must leave the key unstamped so the next refresh retries.
+    gmiss = GamesManager(log, teams=[{"abbr": "NYK", "league": "nba", "name": "Knicks"}])
+    gmiss.fetch_leaders = True
+    gmiss._games = [{
+        "id": "nba-final", "league": "nba", "state": STATE_FINAL, "start": "",
+        "home": {"abbr": "NYK", "score": "100"}, "away": {"abbr": "BOS", "score": "98"},
+        "situation": {}, "leaders": [],
+    }]
+    class _EmptyLeaders:
+        def fetch_batting(self, *a, **k): return []
+        def fetch_leaders(self, *a, **k): return []
+    gmiss.source = _EmptyLeaders()
+    gmiss._refresh_leaders()
+    assert "nba:nba-final" not in gmiss._leaders_fetched
+    print("PASS  NFL/NBA performer enrich merges summary lines; empty miss retries")
 
     # Partial league fetch failure must not wipe other leagues' good data.
     gpartial = GamesManager(log, teams=[

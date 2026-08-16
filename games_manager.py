@@ -465,29 +465,34 @@ class GamesManager:
         boxscore is read instead -- baseball summaries carry no leaders block
         at all, so that is the only place a hitter can be found.
 
-        Finals are fetched once and remembered; a completed boxscore does not
-        change. Live games are refetched because they do.
+        NFL / NBA / soccer get a summary fetch even when the scoreboard
+        already carried a composite rating, so the board shows PTS / PASS /
+        GOAL lines rather than an opaque "RAT". Finals are remembered once
+        a usable line lands; an empty miss is retried next refresh.
         """
         for game in self._games:
             state = game.get("state")
             if state == STATE_UPCOMING:
                 continue
 
-            existing = game.get("leaders") or []
-            if any(l.get("side") == "batting" for l in existing):
+            league = game.get("league") or ""
+            key = f"{league}:{game['id']}"
+            if state == STATE_FINAL and key in self._leaders_fetched:
                 continue
 
-            key = f"{game['league']}:{game['id']}"
-            if state == STATE_FINAL and key in self._leaders_fetched:
+            existing = game.get("leaders") or []
+            if league == "mlb" and any(l.get("side") == "batting" for l in existing):
+                if state == STATE_FINAL:
+                    self._leaders_fetched.add(key)
                 continue
 
             hitters = []
             try:
-                if game["league"] == "mlb":
-                    hitters = self.source.fetch_batting(game["league"], game["id"])
+                if league == "mlb":
+                    hitters = self.source.fetch_batting(league, game["id"])
                 else:
                     hitters = self.source.fetch_leaders(
-                        game["league"], game["id"], self.leaders_per_game
+                        league, game["id"], self.leaders_per_game
                     )
             except Exception as e:
                 self.logger.debug("Performer lookup failed for %s: %s", key, e)
@@ -507,7 +512,9 @@ class GamesManager:
                     sum(1 for l in merged if l.get("side") == "batting"),
                 )
 
-            if state == STATE_FINAL:
+            # Only stamp a final once we have something to show, so a
+            # transient empty summary does not blank the note forever.
+            if state == STATE_FINAL and (hitters or game.get("leaders")):
                 self._leaders_fetched.add(key)
 
     def refresh_streaks(self, interval: float = 300.0) -> None:
