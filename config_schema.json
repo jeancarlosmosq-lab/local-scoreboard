@@ -83,6 +83,12 @@
           "default": 4,
           "minimum": 0,
           "maximum": 8
+        },
+        "screen_chaos": {
+          "type": "boolean",
+          "title": "Whole Screen Cracks & Glitches",
+          "description": "The entire panel periodically cracks, tears sideways (signal interrupt), and flash-smashes — not just the little character bumpers. On by default with fun art; turn off if it is too distracting.",
+          "default": true
         }
       }
     },

@@ -4773,6 +4773,21 @@ def main():
     assert with_fun.width > without_fun.width, (
         with_fun.width, without_fun.width)
     assert len(rfun._fun_art_regions) >= 2, rfun._fun_art_regions
+    # Whole-panel chaos: cracks / glitch tears / interrupt on the final frame.
+    chaos = Image.new("RGB", (192, 32), (40, 80, 120))
+    for px in range(192):
+        for py in range(32):
+            chaos.putpixel((px, py), (40 + (px % 20), 80, 120))
+    before_c = chaos.copy()
+    phases = set()
+    for tt in (1.0, 4.5, 7.0, 8.5):
+        frame = before_c.copy()
+        phases.add(_kid_art.apply_screen_chaos(frame, tt))
+        assert any(
+            frame.getpixel((x, y)) != before_c.getpixel((x, y))
+            for y in range(32) for x in range(0, 192, 4)
+        ), tt
+    assert phases >= {"cracks", "glitch", "interrupt", "smash"}, phases
     print("PASS  kid fun-art bumpers draw, animate, and widen the strip")
 
     # Daily condensation: daytime highs only, Title Case labels, unit convert.

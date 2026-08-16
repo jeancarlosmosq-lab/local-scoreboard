@@ -3120,12 +3120,26 @@ class StripRenderer:
                     [(static.width, 3), (static.width, self.height - 4)],
                     fill=self.DIVIDER)
             img.paste(scrolled, (reserved, 0))
+
+            # Full-panel crack / glitch / interrupt overlay -- the gag is
+            # that the *display itself* is being wrecked, not just a
+            # bumper. Only when fun-art / kid mode asks for it.
+            if self._screen_chaos_enabled():
+                kid_art.apply_screen_chaos(img, time.time())
+
             self.display_manager.image.paste(img, (0, 0))
             self.display_manager.update_display()
             return True
         except Exception as e:
             self.logger.error("Error drawing strip: %s", e, exc_info=True)
             return False
+
+    def _screen_chaos_enabled(self) -> bool:
+        """Whole-panel crack/glitch overlay (kid fascination mode)."""
+        if not self._fun_art_enabled():
+            return False
+        cfg = self.config.get("fun_art") or {}
+        return bool(cfg.get("screen_chaos", True))
 
     def draw_message(self, message: str) -> bool:
         try:

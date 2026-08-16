@@ -476,3 +476,143 @@ def blit(draw, x: int, y: int, sprite_id: str, scale: int = 2,
             draw.rectangle(
                 [px, py, px + scale - 1, py + scale - 1], fill=colour)
     return w * scale, h * scale
+
+
+def apply_screen_chaos(img, t: float) -> str:
+    """Make the whole panel look cracked and interrupted.
+
+    Runs on the final frame (scores + static panel) so kids see the
+    *display itself* glitching -- not just a tiny bumper. Cycles through
+    calm cracks → spreading fractures → signal tears → a smash flash,
+    then settles, so scores stay readable most of the time but the board
+    keeps surprising them.
+
+    Returns the active phase name (for tests / logging).
+    """
+    try:
+        from PIL import ImageDraw as _ID
+    except ImportError:  # pragma: no cover
+        return "none"
+
+    w, h = img.size
+    if w < 8 or h < 8:
+        return "none"
+
+    # ~10s loop: fascinating without constant unreadability.
+    cycle = 10.0
+    u = t % cycle
+    seed = int(t * 12)
+    draw = _ID.Draw(img)
+
+    def rnd(i: int, mod: int) -> int:
+        return abs((seed * 1103515245 + i * 9973) >> 8) % max(1, mod)
+
+    # --- Always-on hairline cracks (subtle "the glass is already broken")
+    for i in range(3):
+        x0 = rnd(i, w)
+        y0 = rnd(i + 3, h)
+        for step in range(w // 3):
+            x0 = (x0 + 1) % w
+            y0 = (y0 + (rnd(i * 20 + step, 3) - 1)) % h
+            if rnd(step + i, 4) != 0:
+                img.putpixel((x0, y0), _CRACK)
+
+    if u < 3.5:
+        phase = "cracks"
+        # Spreading spiderweb from a moving smash point.
+        cx = int((math.sin(t * 0.7) * 0.5 + 0.5) * (w - 1))
+        cy = int((math.cos(t * 0.9) * 0.5 + 0.5) * (h - 1))
+        grow = 0.35 + (u / 3.5) * 0.65
+        for i in range(8):
+            ang = i * (math.pi / 4) + t * 0.4
+            length = int((6 + rnd(i, 10)) * grow)
+            for step in range(1, length + 1):
+                px = int(cx + math.cos(ang) * step) + rnd(step, 3) - 1
+                py = int(cy + math.sin(ang) * step * 0.7) + rnd(step + 1, 3) - 1
+                if 0 <= px < w and 0 <= py < h:
+                    img.putpixel((px, py), _CRACK if step % 2 else _STATIC)
+                    if px + 1 < w:
+                        img.putpixel((px + 1, py), _DEBRIS[i % len(_DEBRIS)])
+
+    elif u < 6.5:
+        phase = "glitch"
+        # Horizontal signal tears -- bands of the image shift sideways.
+        n_bands = 2 + rnd(1, 2)
+        for b in range(n_bands):
+            by = rnd(10 + b, max(1, h - 4))
+            bh = 2 + rnd(20 + b, 3)
+            shift = (rnd(30 + b, 17) - 8) * (1 if int(t * 8) % 2 == 0 else -1)
+            if shift == 0:
+                shift = 4
+            y1 = min(h, by + bh)
+            band = img.crop((0, by, w, y1))
+            # Clear the band then paste shifted (wrap).
+            draw.rectangle([0, by, w - 1, y1 - 1], fill=(0, 0, 0))
+            sx = shift % w
+            img.paste(band, (sx, by))
+            if sx > 0:
+                left = band.crop((w - sx, 0, w, band.height))
+                img.paste(left, (0, by))
+            # Bright tear edge.
+            draw.line([(0, by), (w - 1, by)], fill=_FLASH)
+            if y1 - 1 < h:
+                draw.line([(0, y1 - 1), (w - 1, y1 - 1)], fill=_DEBRIS[b % 3])
+
+        # Static snow flecks.
+        for i in range(w // 2):
+            px = rnd(40 + i, w)
+            py = rnd(50 + i, h)
+            img.putpixel((px, py), _DEBRIS[rnd(i, len(_DEBRIS))])
+
+    elif u < 8.0:
+        phase = "interrupt"
+        # "Signal interrupted" -- thick black bars + noisy flashes.
+        for bar in range(3):
+            by = rnd(60 + bar, max(1, h - 3))
+            bh = 2 + (bar % 2)
+            draw.rectangle([0, by, w - 1, min(h - 1, by + bh)], fill=(0, 0, 0))
+            for x in range(0, w, 2):
+                if rnd(x + bar, 3) == 0:
+                    img.putpixel((x, by), _FLASH)
+        # Vertical scramble columns.
+        for i in range(4):
+            cx = rnd(70 + i, w)
+            for y in range(h):
+                if rnd(y + i * 9, 2) == 0:
+                    img.putpixel((cx, y), _DEBRIS[rnd(y, len(_DEBRIS))])
+                    if cx + 1 < w:
+                        img.putpixel((cx + 1, y), (0, 0, 0))
+
+    else:
+        phase = "smash"
+        # Brief full-panel smash: radial burst + white flash rim.
+        cx, cy = w // 2, h // 2
+        flash = (u - 8.0) < 0.35
+        if flash:
+            # Rim flash, keep centre mostly readable.
+            for x in range(w):
+                img.putpixel((x, 0), _FLASH)
+                img.putpixel((x, h - 1), _FLASH)
+            for y in range(h):
+                img.putpixel((0, y), _FLASH)
+                img.putpixel((w - 1, y), _FLASH)
+        for i in range(16):
+            ang = i * (math.pi / 8) + t * 3
+            for step in range(1, max(w, h) // 2):
+                px = int(cx + math.cos(ang) * step)
+                py = int(cy + math.sin(ang) * step * 0.55)
+                if not (0 <= px < w and 0 <= py < h):
+                    break
+                if step < 4 or rnd(step + i, 3) != 0:
+                    img.putpixel((px, py), _FLASH if flash else _CRACK)
+        # Flying debris across the whole panel.
+        for i in range(20):
+            birth = ((t * 4 + i * 0.2) % 1.5)
+            ang = i * 0.55
+            px = int(cx + math.cos(ang) * birth * w * 0.6)
+            py = int(cy + math.sin(ang) * birth * h * 0.8 + birth * birth * 8)
+            if 0 <= px < w and 0 <= py < h:
+                img.putpixel((px, py), _DEBRIS[i % len(_DEBRIS)])
+
+    return phase
+
