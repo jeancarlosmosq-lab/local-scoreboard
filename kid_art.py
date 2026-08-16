@@ -235,8 +235,8 @@ SPRITE_ORDER: Tuple[str, ...] = (
     "rocket", "dino", "bot", "kitty", "star", "ball", "comet", "fish",
 )
 
-# Bee / UFO that fly across the full panel -- the simple kid gag.
-# Two wing / light frames each so they animate while crossing.
+# Bee / UFO / face flyovers -- the simple kid gag.
+# Bee+UFO cross the panel; face grows as if rushing toward the viewer.
 FLYERS: Dict[str, Tuple[Grid, ...]] = {
     "bee": (
         (
@@ -268,8 +268,25 @@ FLYERS: Dict[str, Tuple[Grid, ...]] = {
             (Y, _, Y, _, Y, _),
         ),
     ),
+    # Goofy face -- frame 0 grin, frame 1 wider "AHH" mouth as it nears.
+    "face": (
+        (
+            (_, K, _, _, K, _),
+            (_, W, _, _, W, _),
+            (_, _, _, _, _, _),
+            (P, _, _, _, _, P),
+            (_, P, P, P, P, _),
+        ),
+        (
+            (_, K, _, _, K, _),
+            (_, W, _, _, W, _),
+            (_, _, R, R, _, _),
+            (P, _, R, R, _, P),
+            (_, P, P, P, P, _),
+        ),
+    ),
 }
-FLYER_ORDER: Tuple[str, ...] = ("bee", "ufo")
+FLYER_ORDER: Tuple[str, ...] = ("bee", "ufo", "face")
 
 # Pixels of horizontal / vertical room reserved around each sprite so a
 # bounce, wiggle, and flying wreckage never clips into neighbouring content.
@@ -528,11 +545,11 @@ def flyer_size(flyer_id: str, scale: int = 2) -> Tuple[int, int]:
 
 def apply_flyer(img, t: float, interval: float = 10.0,
                 flight: float = 2.8) -> Optional[str]:
-    """Fly a bee or UFO across the full panel every so often.
+    """Bee / UFO fly across; face grows as if rushing toward the kids.
 
-    Simple kid gag: every ``interval`` seconds, something zips left→right
-    (or right→left) over ~``flight`` seconds, then the screen is clear
-    again. Alternates bee / UFO. Returns the flyer id while crossing,
+    Every ``interval`` seconds something appears for ~``flight`` seconds,
+    then clears. Bee and UFO zip sideways; face starts tiny in the middle
+    and zooms up (coming at you). Returns the flyer id while active,
     or None while idle.
     """
     try:
@@ -550,13 +567,36 @@ def apply_flyer(img, t: float, interval: float = 10.0,
         return None
 
     flyer_id = FLYER_ORDER[cycle_i % len(FLYER_ORDER)]
+    progress = local / flight  # 0..1
+    draw = _ID.Draw(img)
+    frame = int(local * 10) % 2
+
+    if flyer_id == "face":
+        # Ease-in so it lingers small, then lunges at them.
+        zoom = progress * progress
+        # Scale 1 (far) → almost full panel height (near).
+        max_scale = max(2, (h - 2) // 5)
+        scale = max(1, 1 + int(round(zoom * (max_scale - 1))))
+        # Switch to the wider mouth once it's "close".
+        if progress > 0.55:
+            frame = 1
+        fw, fh = flyer_size(flyer_id, scale=scale)
+        if fw <= 0:
+            return None
+        x = (w - fw) // 2
+        y = max(0, (h - fh) // 2)
+        # Tiny shake when huge -- "in your face".
+        if progress > 0.7:
+            x += int(round(math.sin(local * 25) * 2))
+            y += int(round(math.cos(local * 20) * 1))
+        blit_flyer(draw, x, y, flyer_id, scale=scale, frame=frame)
+        return flyer_id
+
     scale = 3 if h >= 28 else 2
     fw, fh = flyer_size(flyer_id, scale=scale)
     if fw <= 0:
         return None
 
-    progress = local / flight  # 0..1
-    # Alternate direction each appearance.
     going_right = (cycle_i % 2 == 0)
     travel = w + fw + 4
     if going_right:
@@ -564,12 +604,8 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     else:
         x = int(w - progress * travel)
 
-    # Gentle bob so it doesn't slide on a dead-straight rail.
     bob = int(round(math.sin(progress * math.pi * 4) * 2))
     y = max(1, (h - fh) // 2 + bob)
-    frame = int(local * 10) % 2
-
-    draw = _ID.Draw(img)
     blit_flyer(draw, x, y, flyer_id, scale=scale, frame=frame)
     return flyer_id
 

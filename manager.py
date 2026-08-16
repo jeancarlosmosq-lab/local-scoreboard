@@ -1079,8 +1079,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 and getattr(self.strip, "_flyers_enabled", lambda: False)()):
             self._fun_art_logged = True
             self.logger.info(
-                "Fun art: bee/UFO flyovers across the panel "
-                "(simple kid gag; cracked-window off unless enabled)"
+                "Fun art: bee/UFO flyovers + face zooming toward the kids "
+                "(simple gag; cracked-window off unless enabled)"
             )
         span = self.strip.scroll_span(built)
 

@@ -4721,10 +4721,10 @@ def main():
     import kid_art as _kid_art
     assert set(_kid_art.SPRITE_ORDER) <= set(_kid_art.SPRITES)
     assert set(_kid_art.FLYER_ORDER) <= set(_kid_art.FLYERS)
-    # Flyer crosses, then clears.
+    # Flyer crosses, then clears. Face zooms toward the viewer.
     fimg = Image.new("RGB", (192, 32), (10, 10, 10))
     assert _kid_art.apply_flyer(fimg, 1.0, interval=10, flight=2.8) in (
-        "bee", "ufo")
+        "bee", "ufo", "face")
     lit = sum(1 for y in range(32) for x in range(192)
               if fimg.getpixel((x, y)) != (10, 10, 10))
     assert lit > 10, lit
@@ -4732,6 +4732,16 @@ def main():
     assert _kid_art.apply_flyer(idle, 6.0, interval=10, flight=2.8) is None
     assert all(idle.getpixel((x, y)) == (10, 10, 10)
                for y in range(32) for x in range(0, 192, 8))
+    # Face cycle: interval*2 lands on face (bee=0, ufo=1, face=2).
+    far = Image.new("RGB", (192, 32), (0, 0, 0))
+    near = Image.new("RGB", (192, 32), (0, 0, 0))
+    assert _kid_art.apply_flyer(far, 20.3, interval=10, flight=2.8) == "face"
+    assert _kid_art.apply_flyer(near, 22.5, interval=10, flight=2.8) == "face"
+    lit_far = sum(1 for y in range(32) for x in range(192)
+                  if far.getpixel((x, y)) != (0, 0, 0))
+    lit_near = sum(1 for y in range(32) for x in range(192)
+                   if near.getpixel((x, y)) != (0, 0, 0))
+    assert lit_near > lit_far, (lit_far, lit_near)
     picks = _kid_art.pick_sprites(15, count=2)
     assert len(picks) == 2 and picks[0] != picks[1]
     rfun = StripRenderer(
