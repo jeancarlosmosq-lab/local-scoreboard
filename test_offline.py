@@ -4721,22 +4721,31 @@ def main():
     import kid_art as _kid_art
     assert set(_kid_art.SPRITE_ORDER) <= set(_kid_art.SPRITES)
     assert set(_kid_art.FLYER_ORDER) <= set(_kid_art.FLYERS)
-    # Flyer crosses, then clears. Face zooms toward the viewer.
+    # Flyer crosses, then clears. Face/star zoom toward the viewer.
     fimg = Image.new("RGB", (192, 32), (10, 10, 10))
-    assert _kid_art.apply_flyer(fimg, 1.0, interval=10, flight=2.8) in (
-        "bee", "ufo", "face")
+    assert _kid_art.apply_flyer(fimg, 1.0, interval=10, flight=2.8) == "bee"
     lit = sum(1 for y in range(32) for x in range(192)
               if fimg.getpixel((x, y)) != (10, 10, 10))
     assert lit > 10, lit
     idle = Image.new("RGB", (192, 32), (10, 10, 10))
     assert _kid_art.apply_flyer(idle, 6.0, interval=10, flight=2.8) is None
-    assert all(idle.getpixel((x, y)) == (10, 10, 10)
-               for y in range(32) for x in range(0, 192, 8))
-    # Face cycle: interval*2 lands on face (bee=0, ufo=1, face=2).
+    seen = set()
+    for i in range(len(_kid_art.FLYER_ORDER)):
+        stamp = Image.new("RGB", (192, 32), (0, 0, 0))
+        fid = _kid_art.apply_flyer(
+            stamp, i * 10 + 1.0, interval=10, flight=2.8)
+        assert fid == _kid_art.FLYER_ORDER[i], (i, fid)
+        seen.add(fid)
+        assert sum(1 for y in range(32) for x in range(192)
+                   if stamp.getpixel((x, y)) != (0, 0, 0)) > 5, fid
+    assert seen == set(_kid_art.FLYER_ORDER)
+    # Face zooms: later in its flight covers more pixels.
+    face_i = _kid_art.FLYER_ORDER.index("face")
     far = Image.new("RGB", (192, 32), (0, 0, 0))
     near = Image.new("RGB", (192, 32), (0, 0, 0))
-    assert _kid_art.apply_flyer(far, 20.3, interval=10, flight=2.8) == "face"
-    assert _kid_art.apply_flyer(near, 22.5, interval=10, flight=2.8) == "face"
+    base = face_i * 10.0
+    assert _kid_art.apply_flyer(far, base + 0.3, interval=10, flight=2.8) == "face"
+    assert _kid_art.apply_flyer(near, base + 2.5, interval=10, flight=2.8) == "face"
     lit_far = sum(1 for y in range(32) for x in range(192)
                   if far.getpixel((x, y)) != (0, 0, 0))
     lit_near = sum(1 for y in range(32) for x in range(192)

@@ -79,7 +79,7 @@
         "flyers": {
           "type": "boolean",
           "title": "Bee / UFO Flyovers",
-          "description": "Every so often a bee or UFO zips across, or a face rushes toward the viewer (grows from tiny to huge). On by default.",
+          "description": "Every so often an animal or flying object zips across (bee, bird, plane, rocket, …) or a face/star rushes toward the viewer. On by default.",
           "default": true
         },
         "flyer_interval": {

@@ -235,8 +235,8 @@ SPRITE_ORDER: Tuple[str, ...] = (
     "rocket", "dino", "bot", "kitty", "star", "ball", "comet", "fish",
 )
 
-# Bee / UFO / face flyovers -- the simple kid gag.
-# Bee+UFO cross the panel; face grows as if rushing toward the viewer.
+# Bee / UFO / face / more animals & flyers -- the simple kid gag.
+# Most zip across; face + star grow toward the viewer.
 FLYERS: Dict[str, Tuple[Grid, ...]] = {
     "bee": (
         (
@@ -268,7 +268,7 @@ FLYERS: Dict[str, Tuple[Grid, ...]] = {
             (Y, _, Y, _, Y, _),
         ),
     ),
-    # Goofy face -- frame 0 grin, frame 1 wider "AHH" mouth as it nears.
+    # Goofy face -- frame 0 grin, frame 1 wider mouth as it nears.
     "face": (
         (
             (_, K, _, _, K, _),
@@ -285,8 +285,242 @@ FLYERS: Dict[str, Tuple[Grid, ...]] = {
             (_, P, P, P, P, _),
         ),
     ),
+    "bird": (
+        (
+            (_, _, W, _, _, _),
+            (_, W, Y, W, _, _),
+            (W, _, Y, _, W, _),
+            (_, _, O, _, _, _),
+            (_, _, O, _, _, _),
+        ),
+        (
+            (W, _, W, _, W, _),
+            (_, W, Y, W, _, _),
+            (_, _, Y, _, _, _),
+            (_, _, O, _, _, _),
+            (_, _, O, _, _, _),
+        ),
+    ),
+    "butterfly": (
+        (
+            (P, _, _, _, P, _),
+            (P, P, _, P, P, _),
+            (_, P, K, P, _, _),
+            (P, P, _, P, P, _),
+            (P, _, _, _, P, _),
+        ),
+        (
+            (_, P, _, P, _, _),
+            (P, _, K, _, P, _),
+            (_, P, K, P, _, _),
+            (P, _, _, _, P, _),
+            (_, _, _, _, _, _),
+        ),
+    ),
+    "bat": (
+        (
+            (K, _, _, _, K, _),
+            (K, K, K, K, K, _),
+            (_, K, R, K, _, _),
+            (_, _, K, _, _, _),
+        ),
+        (
+            (_, K, _, K, _, _),
+            (K, K, K, K, K, _),
+            (_, K, R, K, _, _),
+            (_, _, K, _, _, _),
+        ),
+    ),
+    "duck": (
+        (
+            (_, _, Y, _, _, _),
+            (_, Y, Y, Y, _, _),
+            (O, Y, K, Y, _, _),
+            (_, Y, Y, Y, Y, _),
+            (_, _, Y, _, Y, _),
+        ),
+        (
+            (_, _, Y, _, _, _),
+            (_, Y, Y, Y, _, _),
+            (O, Y, K, Y, _, _),
+            (_, Y, Y, Y, Y, _),
+            (_, Y, _, Y, _, _),
+        ),
+    ),
+    "cat": (
+        (
+            (N, _, _, _, N, _),
+            (_, N, N, N, _, _),
+            (N, G, N, G, N, _),
+            (N, N, P, N, N, _),
+            (_, N, N, N, _, _),
+        ),
+        (
+            (N, _, _, _, N, _),
+            (_, N, N, N, _, _),
+            (N, G, N, G, N, _),
+            (N, N, P, N, N, _),
+            (N, _, _, _, N, _),
+        ),
+    ),
+    "dog": (
+        (
+            (N, _, _, N, _, _),
+            (N, N, N, N, _, _),
+            (N, K, N, K, _, _),
+            (N, N, N, N, N, _),
+            (_, N, _, N, _, _),
+        ),
+        (
+            (_, N, _, N, _, _),
+            (N, N, N, N, _, _),
+            (N, K, N, K, _, _),
+            (N, N, N, N, N, _),
+            (_, N, _, N, _, _),
+        ),
+    ),
+    "bunny": (
+        (
+            (W, _, W, _, _, _),
+            (W, _, W, _, _, _),
+            (_, W, W, W, _, _),
+            (W, P, W, P, W, _),
+            (_, W, P, W, _, _),
+        ),
+        (
+            (_, W, _, W, _, _),
+            (W, _, W, _, _, _),
+            (_, W, W, W, _, _),
+            (W, P, W, P, W, _),
+            (_, W, P, W, _, _),
+        ),
+    ),
+    "dragon": (
+        (
+            (_, _, G, _, _, _),
+            (_, G, R, G, _, _),
+            (G, G, G, G, G, _),
+            (_, G, _, G, _, _),
+            (G, _, _, _, G, _),
+        ),
+        (
+            (_, _, G, G, _, _),
+            (_, G, R, G, _, _),
+            (G, G, G, G, G, _),
+            (G, _, G, _, _, _),
+            (_, G, _, _, G, _),
+        ),
+    ),
+    "plane": (
+        (
+            (_, _, W, _, _, _),
+            (B, B, B, B, B, _),
+            (_, _, B, _, _, _),
+            (_, W, B, W, _, _),
+            (_, _, B, _, _, _),
+        ),
+        (
+            (_, _, W, _, _, _),
+            (B, B, B, B, B, _),
+            (_, _, B, _, _, _),
+            (W, _, B, _, W, _),
+            (_, _, B, _, _, _),
+        ),
+    ),
+    "rocket": (
+        (
+            (_, _, W, _, _, _),
+            (_, R, R, R, _, _),
+            (R, W, R, W, R, _),
+            (_, R, R, R, _, _),
+            (_, _, O, _, _, _),
+            (_, _, Y, _, _, _),
+        ),
+        (
+            (_, _, W, _, _, _),
+            (_, R, R, R, _, _),
+            (R, W, R, W, R, _),
+            (_, R, R, R, _, _),
+            (_, _, Y, _, _, _),
+            (_, _, O, _, _, _),
+        ),
+    ),
+    "balloon": (
+        (
+            (_, R, R, _, _),
+            (R, W, R, R, _),
+            (R, R, R, R, _),
+            (_, R, R, _, _),
+            (_, _, N, _, _),
+            (_, _, N, _, _),
+        ),
+        (
+            (_, P, P, _, _),
+            (P, W, P, P, _),
+            (P, P, P, P, _),
+            (_, P, P, _, _),
+            (_, _, N, _, _),
+            (_, _, N, _, _),
+        ),
+    ),
+    "kite": (
+        (
+            (_, _, R, _, _, _),
+            (_, R, W, R, _, _),
+            (R, W, R, W, R, _),
+            (_, R, W, R, _, _),
+            (_, _, Y, _, _, _),
+            (_, _, _, Y, _, _),
+        ),
+        (
+            (_, _, B, _, _, _),
+            (_, B, W, B, _, _),
+            (B, W, B, W, B, _),
+            (_, B, W, B, _, _),
+            (_, _, Y, _, _, _),
+            (_, Y, _, _, _, _),
+        ),
+    ),
+    "star": (
+        (
+            (_, _, Y, _, _, _),
+            (_, Y, Y, Y, _, _),
+            (Y, Y, W, Y, Y, _),
+            (_, Y, Y, Y, _, _),
+            (_, _, Y, _, _, _),
+        ),
+        (
+            (_, _, O, _, _, _),
+            (_, O, Y, O, _, _),
+            (O, Y, W, Y, O, _),
+            (_, O, Y, O, _, _),
+            (_, _, O, _, _, _),
+        ),
+    ),
+    "helicopter": (
+        (
+            (W, W, W, W, W, _),
+            (_, _, B, _, _, _),
+            (B, B, B, B, _, _),
+            (_, _, B, _, _, _),
+            (_, B, _, B, _, _),
+        ),
+        (
+            (_, W, W, W, _, _),
+            (W, _, B, _, W, _),
+            (B, B, B, B, _, _),
+            (_, _, B, _, _, _),
+            (B, _, _, _, B, _),
+        ),
+    ),
 }
-FLYER_ORDER: Tuple[str, ...] = ("bee", "ufo", "face")
+FLYER_ORDER: Tuple[str, ...] = (
+    "bee", "ufo", "face", "bird", "butterfly", "plane", "cat", "rocket",
+    "duck", "kite", "bat", "balloon", "bunny", "star", "dog", "dragon",
+    "helicopter",
+)
+# Rush toward the viewer (grow) instead of crossing sideways.
+FLYER_ZOOM: Tuple[str, ...] = ("face", "star")
 
 # Pixels of horizontal / vertical room reserved around each sprite so a
 # bounce, wiggle, and flying wreckage never clips into neighbouring content.
@@ -571,21 +805,18 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     draw = _ID.Draw(img)
     frame = int(local * 10) % 2
 
-    if flyer_id == "face":
+    if flyer_id in FLYER_ZOOM:
         # Ease-in so it lingers small, then lunges at them.
         zoom = progress * progress
-        # Scale 1 (far) → almost full panel height (near).
         max_scale = max(2, (h - 2) // 5)
         scale = max(1, 1 + int(round(zoom * (max_scale - 1))))
-        # Switch to the wider mouth once it's "close".
-        if progress > 0.55:
+        if flyer_id == "face" and progress > 0.55:
             frame = 1
         fw, fh = flyer_size(flyer_id, scale=scale)
         if fw <= 0:
             return None
         x = (w - fw) // 2
         y = max(0, (h - fh) // 2)
-        # Tiny shake when huge -- "in your face".
         if progress > 0.7:
             x += int(round(math.sin(local * 25) * 2))
             y += int(round(math.cos(local * 20) * 1))
@@ -605,7 +836,12 @@ def apply_flyer(img, t: float, interval: float = 10.0,
         x = int(w - progress * travel)
 
     bob = int(round(math.sin(progress * math.pi * 4) * 2))
-    y = max(1, (h - fh) // 2 + bob)
+    # Balloon / kite drift a little higher; bat a little lower.
+    if flyer_id in ("balloon", "kite", "helicopter"):
+        bob -= 2
+    elif flyer_id in ("bat", "cat", "dog", "bunny"):
+        bob += 1
+    y = max(1, min(h - fh - 1, (h - fh) // 2 + bob))
     blit_flyer(draw, x, y, flyer_id, scale=scale, frame=frame)
     return flyer_id
 
