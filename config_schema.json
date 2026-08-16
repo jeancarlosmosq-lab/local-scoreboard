@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Soft-shaded realistic bird flyovers (hawk, swan, cardinal, crow, eagle, seagull, blue jay, penguin, owl, heron, hummingbird, toucan, flamingo, woodpecker, robin, goose, macaw, pelican). Handmade — not licensed characters.",
+      "description": "Soft-shaded birds in flight (hawk, eagle, seagull, crow, goose, pelican, hummingbird). Handmade — not licensed characters.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -79,7 +79,7 @@
         "flyers": {
           "type": "boolean",
           "title": "Bird Flyovers",
-          "description": "Every so often a soft-shaded bird crosses with depth. On by default.",
+          "description": "Every so often a soft-shaded bird in flight crosses with depth. On by default.",
           "default": true
         },
         "flyer_interval": {

@@ -252,9 +252,7 @@ SPRITE_ORDER: Tuple[str, ...] = (
 # Handmade procedural birds -- not licensed characters.
 
 FLYER_ORDER: Tuple[str, ...] = (
-    "hawk", "swan", "cardinal", "crow", "eagle", "seagull",
-    "bluejay", "penguin", "owl", "heron", "hummingbird", "toucan",
-    "flamingo", "woodpecker", "robin", "goose", "macaw", "pelican",
+    "hawk", "eagle", "seagull", "crow", "goose", "pelican", "hummingbird",
 )
 FLYERS: Dict[str, str] = {name: name for name in FLYER_ORDER}
 
@@ -906,13 +904,6 @@ def apply_flyer(img, t: float, interval: float = 10.0,
         bob = int(round(math.sin(progress * math.pi * 5) * (1 + fh // 12)))
     elif flyer_id == "hummingbird":
         bob = int(round(math.sin(progress * math.pi * 9) * (2 + fh // 10)))
-    elif flyer_id in ("cardinal", "bluejay", "robin", "macaw", "toucan",
-                      "woodpecker"):
-        bob = int(round(abs(math.sin(progress * math.pi * 7)) * (fh // 12)))
-    elif flyer_id in ("owl", "penguin"):
-        bob = int(round(math.sin(progress * math.pi * 2) * (fh // 14)))
-    elif flyer_id in ("flamingo", "heron", "swan"):
-        bob = int(round(math.sin(progress * math.pi * 2.5) * (fh // 12)))
     y = max(0, min(h - fh, (h - fh) // 2 + bob))
 
     if img.mode != "RGBA":

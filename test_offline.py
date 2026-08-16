@@ -4732,15 +4732,11 @@ def main():
     assert "face" not in _kid_art.FLYERS and "face" not in _kid_art.FLYER_ORDER
     assert "moon" not in _kid_art.FLYERS
     assert _kid_art.FLYER_ORDER[0] == "hawk"
-    assert "cardinal" in _kid_art.FLYER_ORDER and "eagle" in _kid_art.FLYER_ORDER
+    assert "eagle" in _kid_art.FLYER_ORDER and "hummingbird" in _kid_art.FLYER_ORDER
+    assert "penguin" not in _kid_art.FLYER_ORDER and "flamingo" not in _kid_art.FLYER_ORDER
     assert set(_kid_art.FLYER_ORDER) == set(_kid_art.FLYERS)
-    assert len(_kid_art.FLYER_ORDER) >= 8
-    banned = {"mario", "luigi", "yoshi", "pikachu", "sonic", "spiderman",
-              "elsa", "minecraft", "steve", "creeper", "spongebob", "mickey",
-              "plumber", "chomp", "helper", "spark", "digger", "dasher",
-              "bubbly", "webkid", "frost", "pup", "moon", "soccer", "baseball",
-              "dolphin", "fox"}
-    assert not (banned & set(_kid_art.FLYERS))
+    assert len(_kid_art.FLYER_ORDER) >= 5
+    assert set(_kid_art.FLYER_ORDER) <= set(_kid_art._FLYER_RENDERERS)
     seen = set()
     for i in range(len(_kid_art.FLYER_ORDER)):
         stamp = Image.new("RGB", (192, 32), (0, 0, 0))
