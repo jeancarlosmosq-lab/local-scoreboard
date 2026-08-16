@@ -4730,6 +4730,7 @@ def main():
     idle = Image.new("RGB", (192, 32), (10, 10, 10))
     assert _kid_art.apply_flyer(idle, 6.0, interval=10, flight=2.8) is None
     assert "face" not in _kid_art.FLYERS and "face" not in _kid_art.FLYER_ORDER
+    assert "plumber" in _kid_art.FLYERS and _kid_art.FLYER_ORDER[2] == "plumber"
     seen = set()
     for i in range(len(_kid_art.FLYER_ORDER)):
         stamp = Image.new("RGB", (192, 32), (0, 0, 0))

@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Simple kid gag: animals and flying objects cross the screen with depth (they look closer in the middle, farther at the edges). On automatically with Kid-Friendly Mode. Handmade sprites — not licensed characters.",
+      "description": "Simple kid gag: animals, flying objects, and an original plumber (hard hat + wrench) cross the screen with depth. On automatically with Kid-Friendly Mode. Handmade sprites — not licensed characters.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -79,7 +79,7 @@
         "flyers": {
           "type": "boolean",
           "title": "Animal / Object Flyovers",
-          "description": "Every so often a bee, bird, plane, rocket, etc. flies across with depth (grows closer mid-screen, then shrinks away). On by default.",
+          "description": "Every so often a bee, plumber, bird, plane, rocket, etc. flies across with depth (grows closer mid-screen, then shrinks away). On by default.",
           "default": true
         },
         "flyer_interval": {

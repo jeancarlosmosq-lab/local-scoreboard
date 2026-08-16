@@ -235,8 +235,8 @@ SPRITE_ORDER: Tuple[str, ...] = (
     "rocket", "dino", "bot", "kitty", "star", "ball", "comet", "fish",
 )
 
-# Bee / UFO / face / more animals & flyers -- the simple kid gag.
-# Most zip across; face + star grow toward the viewer.
+# Bee / UFO / animals / objects / original plumber -- the simple kid gag.
+# All fly with depth (scale up mid-screen, shrink at the edges).
 FLYERS: Dict[str, Tuple[Grid, ...]] = {
     "bee": (
         (
@@ -497,9 +497,29 @@ FLYERS: Dict[str, Tuple[Grid, ...]] = {
             (B, _, _, _, B, _),
         ),
     ),
+    # Original plumber -- yellow hard hat, blue coveralls, wrench.
+    # Not a licensed mascot (no red hat / mustache / "M").
+    "plumber": (
+        (
+            (_, Y, Y, Y, _, _),
+            (Y, N, N, N, Y, _),
+            (_, W, N, W, _, _),
+            (_, B, B, B, O, O),
+            (_, B, B, B, _, O),
+            (B, _, _, B, _, _),
+        ),
+        (
+            (_, Y, Y, Y, _, _),
+            (Y, N, N, N, Y, _),
+            (_, W, N, W, _, _),
+            (O, O, B, B, B, _),
+            (O, _, B, B, B, _),
+            (_, B, _, _, B, _),
+        ),
+    ),
 }
 FLYER_ORDER: Tuple[str, ...] = (
-    "bee", "ufo", "bird", "butterfly", "plane", "cat", "rocket",
+    "bee", "ufo", "plumber", "bird", "butterfly", "plane", "cat", "rocket",
     "duck", "kite", "bat", "balloon", "bunny", "star", "dog", "dragon",
     "helicopter",
 )
@@ -816,6 +836,10 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     if flyer_id in ("balloon", "kite", "helicopter"):
         bob -= 2
     elif flyer_id in ("bat", "cat", "dog", "bunny"):
+        bob += 1
+    elif flyer_id == "plumber":
+        # Running bounce -- a bit lower so the hard hat clears the top.
+        bob = int(round(math.sin(progress * math.pi * 6) * (1 + scale // 2)))
         bob += 1
     y = max(0, min(h - fh, (h - fh) // 2 + bob))
     blit_flyer(draw, x, y, flyer_id, scale=scale, frame=frame)
