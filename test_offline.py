@@ -4677,6 +4677,30 @@ def main():
     assert cheer_w > 10 and any("Win!" in str(t) for t in kdraw.texts)
     print("PASS  kid-friendly weather tips, football simplify, win cheer")
 
+    # Favorite player: prefer Yamal in scorers; Star note draws the name.
+    yamal_game = {
+        "id": "bar1", "league": "laliga", "state": STATE_FINAL,
+        "home": {"abbr": "BAR", "score": "3", "winner": True},
+        "away": {"abbr": "RMA", "score": "1", "winner": False},
+        "leaders": [
+            {"team": "BAR", "name": "R.Lewandowski", "full_name": "Robert Lewandowski",
+             "line": "12'", "category": "GOAL", "side": "batting"},
+            {"team": "BAR", "name": "L.Yamal", "full_name": "Lamine Yamal",
+             "line": "67'", "category": "GOAL", "side": "batting"},
+        ],
+    }
+    picked = ESPNGamesSource.pick_performer(
+        yamal_game, "BAR", prefer_name="Lamine Yamal")
+    assert picked and "Yamal" in picked["full_name"], picked
+    rfav = StripRenderer(FakeDisplay(192, 32), {"kid_friendly": True}, log)
+    fimg = Image.new("RGB", (160, 32), (0, 0, 0))
+    fspy = _TextSpyDraw(_KidID.Draw(fimg))
+    ffont, frow = rfav._fit_font(fspy, 3, 32)
+    rfav._draw_favorite_player(fimg, fspy, 2, "Lamine Yamal", ffont, frow)
+    assert any("Star" in str(t) for t in fspy.texts)
+    assert any("Lamine Yamal" in str(t) for t in fspy.texts)
+    print("PASS  favorite_player prefers Yamal and draws a Star note")
+
     # Daily condensation: daytime highs only, Title Case labels, unit convert.
     wx_daily = NWSWeather(log, 40.66, -74.11, units="C")
     condensed = wx_daily._condense_daily([

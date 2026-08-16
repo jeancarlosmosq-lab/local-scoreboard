@@ -343,6 +343,12 @@
               "type": "string"
             },
             "default": []
+          },
+          "favorite_player": {
+            "type": "string",
+            "title": "Favorite Player",
+            "description": "Optional. Shown on that team's strip as a Star note (e.g. Lamine Yamal for Barcelona). When they appear in a game's scorers or notables, they are preferred for the performer highlight.",
+            "default": ""
           }
         }
       },

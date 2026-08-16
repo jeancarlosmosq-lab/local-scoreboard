@@ -593,8 +593,15 @@ class GamesManager:
         Leaving a live team wherever it happened to sit in the configured
         order means waiting most of a pass to see a score that is changing as
         you wait.
+
+        Teams with a configured favorite_player stay on the strip even with
+        no headline games, so a kid's star (Yamal on Barça) still appears
+        on quiet days.
         """
-        having = [t for t in self.teams if self.games_for_team(t)]
+        having = [
+            t for t in self.teams
+            if self.games_for_team(t) or (t.get("favorite_player") or "").strip()
+        ]
         live_first = [
             t for t in having
             if any(g.get("state") == STATE_LIVE for g in self.games_for_team(t))

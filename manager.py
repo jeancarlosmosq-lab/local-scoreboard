@@ -998,7 +998,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 (t, [g for g in games if g.get("id") != panel_game.get("id")])
                 for t, games in teams_and_games
             ]
-        teams_and_games = [(t, g) for t, g in teams_and_games if g]
+        teams_and_games = [(t, g) for t, g in teams_and_games
+                           if g or (t.get("favorite_player") or "").strip()]
         other_live = (
             self.games.other_live_games(
                 self.teams_other_live_limit,
@@ -1196,7 +1197,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                     (t, [g for g in games if g.get("id") != panel_game.get("id")])
                     for t, games in pairs
                 ]
-            pairs = [(t, g) for t, g in pairs if g]
+            pairs = [(t, g) for t, g in pairs
+                     if g or (t.get("favorite_player") or "").strip()]
             any_live = self.games.has_any_live()
             boards, awards = self._leaderboards()
             countdown_events = self._countdowns()

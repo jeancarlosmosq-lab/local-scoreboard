@@ -1855,6 +1855,33 @@ class StripRenderer:
                 return side
         return None
 
+    def _draw_favorite_player(self, img, draw, x: int, name: str,
+                              font, row_h: int) -> int:
+        """A configured favorite athlete on a team's strip -- Star + name.
+
+        Always on for that team (not only when they scored tonight), so a
+        kid's favorite still shows on quiet days. Uses the same two-row
+        shape as a performer note.
+        """
+        from espn_data_source import abbreviate_name
+        full = self._safe(name.strip())
+        if not full:
+            return 0
+        short = abbreviate_name(full) or full
+        label = "Star" if self.kid_friendly else "Favorite"
+        start = x
+        start_row = self._vblock_start(row_h, 2)
+        top = self._text_top(draw, font, start_row, sample=label)
+        draw.text((x, top), label, font=font, fill=self.DIM)
+        w1 = self._measure(draw, label, font)[0]
+        # Prefer the full name when the kid-friendly board is on --
+        # "Lamine Yamal" is the point; abbreviate only if it clearly
+        # overflows a short adult strip note.
+        shown = full if (self.kid_friendly or len(full) <= 14) else short
+        draw.text((x, top + row_h), shown, font=font, fill=self.UPCOMING)
+        w2 = self._measure(draw, shown, font)[0]
+        return (x + max(w1, w2) + 6) - start
+
     def _draw_note(self, img, draw, x: int, name: str, short_name: str,
                    body: str, font, row_h: int) -> int:
         """A performer: name above, stat line below.
@@ -2425,11 +2452,16 @@ class StripRenderer:
         other_live_queue = list(other_live or [])
 
         for team, games in teams_and_games:
-            if not games:
+            fav = (team.get("favorite_player") or "").strip()
+            if not games and not fav:
                 continue
             streak = (streaks or {}).get(team.get("abbr", ""), "")
             x += self._draw_banner(scratch, draw, x, team, font, row_h, streak)
             x += self._draw_divider(scratch, draw, x)
+            if fav:
+                x += self._draw_favorite_player(
+                    scratch, draw, x, fav, font, row_h)
+                x += self._draw_divider(scratch, draw, x)
             rivals = team.get("rivals") or []
             rival_abbrs = set()
             for a in rivals:
@@ -2454,7 +2486,8 @@ class StripRenderer:
                         scratch, draw, x, game, font, row_h,
                         start_labels.get(game.get("id"), ""),
                         performer=ESPNGamesSource.pick_performer(
-                            game, team.get("abbr", "")
+                            game, team.get("abbr", ""),
+                            prefer_name=fav,
                         ),
                         focus_abbr=team.get("abbr", ""),
                         rivals=rivals,

@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.61.0",
+  "version": "0.62.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.62.0",
+      "released": "2026-08-16",
+      "notes": "Per-team favorite_player (e.g. Lamine Yamal on Barcelona): Star note on the strip even with no game today, and preferred when they appear in scorers/notables. Barça-friendly config: BAR first in strip/panel priority."
+    },
     {
       "version": "0.61.0",
       "released": "2026-08-16",

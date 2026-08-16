@@ -889,17 +889,33 @@ class ESPNGamesSource:
         return self._parse_boxscore_batting(data)
 
     @staticmethod
-    def pick_performer(game: Dict, focus_abbr: str) -> Optional[Dict]:
+    def pick_performer(game: Dict, focus_abbr: str,
+                       prefer_name: str = "") -> Optional[Dict]:
         """The one performance worth showing for a given team's board.
 
         An offensive line from the followed team -- what did our hitters do --
         and if that team lost, the winner's instead, because the story of a
         loss is who beat you. Falls back to any line rather than showing
         nothing.
+
+        prefer_name (optional favorite player) wins when that athlete is in
+        the leaders list -- so a configured star like Yamal surfaces when
+        he scores, instead of whichever scorer ESPN listed first.
         """
         leaders = [l for l in (game.get("leaders") or []) if l.get("name")]
         if not leaders:
             return None
+
+        prefer = (prefer_name or "").strip().lower()
+        if prefer:
+            for leader in leaders:
+                hay = " ".join([
+                    str(leader.get("full_name") or ""),
+                    str(leader.get("name") or ""),
+                ]).lower()
+                # Match full name or last token ("yamal" in "Lamine Yamal").
+                if prefer in hay or prefer.split()[-1] in hay.split():
+                    return leader
 
         wanted = abbr_group(focus_abbr)
         home = game.get("home") or {}
