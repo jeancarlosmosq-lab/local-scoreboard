@@ -463,11 +463,13 @@ class StripRenderer:
         except Exception:
             return len(text) * 5, 7
 
-    def _logo(self, league: str, abbr: str, size: int):
+    def _logo(self, league: str, abbr: str, size: int,
+              espn_id: str = ""):
         if not self.logo_manager or not abbr:
             return None
         try:
-            return self.logo_manager.get_logo(league, abbr, size)
+            return self.logo_manager.get_logo(
+                league, abbr, size, espn_id=espn_id or None)
         except Exception:
             return None
 
@@ -972,7 +974,10 @@ class StripRenderer:
 
         cursor = x
         for index, side in enumerate((ours, theirs)):
-            crest = self._logo(league, side.get("abbr", ""), crest_size)
+            crest = self._logo(
+                league, side.get("abbr", ""), crest_size,
+                espn_id=str(side.get("id") or ""),
+            )
             figure = self._safe(side.get("score", ""))
             if state == "upcoming":
                 figure = self._safe(side.get("record", ""))
@@ -2717,8 +2722,12 @@ class StripRenderer:
             for index, side in enumerate((ours, theirs)):
                 y = self.MARGIN + row_h * (index + 1)
                 x = 1
-                crest = self._logo(game.get("league", ""),
-                                   side.get("abbr", ""), crest_size)
+                crest = self._logo(
+                    game.get("league", ""),
+                    side.get("abbr", ""),
+                    crest_size,
+                    espn_id=str(side.get("id") or ""),
+                )
                 if crest is not None:
                     oy = y + max(0, (row_h - crest.height) // 2)
                     panel.paste(crest, (x, oy), crest)

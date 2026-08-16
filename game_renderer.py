@@ -267,11 +267,13 @@ class GameCardRenderer:
         self.display_manager.image.paste(img, (0, 0))
         self.display_manager.update_display()
 
-    def _logo(self, league: str, abbr: str, size: int):
+    def _logo(self, league: str, abbr: str, size: int,
+              espn_id: str = ""):
         if not self.logo_manager or not abbr:
             return None
         try:
-            return self.logo_manager.get_logo(league, abbr, size)
+            return self.logo_manager.get_logo(
+                league, abbr, size, espn_id=espn_id or None)
         except Exception:
             return None
 
@@ -326,10 +328,14 @@ class GameCardRenderer:
 
             logo_size = max(5, row_h - 1)
             logos = {
-                "away": self._logo(game.get("league", ""), away.get("abbr", ""),
-                                   logo_size) if show_logos else None,
-                "home": self._logo(game.get("league", ""), home.get("abbr", ""),
-                                   logo_size) if show_logos else None,
+                "away": self._logo(
+                    game.get("league", ""), away.get("abbr", ""), logo_size,
+                    espn_id=str(away.get("id") or ""),
+                ) if show_logos else None,
+                "home": self._logo(
+                    game.get("league", ""), home.get("abbr", ""), logo_size,
+                    espn_id=str(home.get("id") or ""),
+                ) if show_logos else None,
             }
             logo_w = max((l.width for l in logos.values() if l is not None),
                          default=0)

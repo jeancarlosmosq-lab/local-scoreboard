@@ -629,8 +629,11 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                             )
 
                 if self.teams_show_logos and self.logos is not None:
+                    # Include ESPN team id so soccer/La Liga crests warm
+                    # correctly (CDN is numeric-id keyed, not abbr).
                     pairs = {
-                        (g["league"], side["abbr"])
+                        (g["league"], side["abbr"],
+                         str(side.get("id") or ""))
                         for g in self.games.games()
                         for side in (g["away"], g["home"])
                         if side.get("abbr")

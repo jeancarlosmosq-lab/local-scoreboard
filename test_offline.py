@@ -732,6 +732,22 @@ def main():
     )
     print("PASS  laliga crest downloads remap to ESPN's soccer CDN folder")
 
+    # Opponent crests: Real Madrid (and the rest of La Liga) must resolve
+    # via the numeric-id table, not blank out as text abbreviations.
+    assert "RMA" in _logo_mod.ESPN_LOGO_ID_OVERRIDES
+    assert "GET" in _logo_mod.ESPN_LOGO_ID_OVERRIDES
+    logos_rma = TeamLogoManager(log, cache_dir=logo_dir, allow_download=True)
+    url_calls.clear()
+    _logo_mod.requests.get = _stub_get
+    try:
+        logos_rma._download("laliga", "RMA")
+        logos_rma._download("laliga", "GET", espn_id="2922")
+    finally:
+        _logo_mod.requests.get = orig_requests_get
+    assert any("/soccer/500/86.png" in u for u in url_calls), url_calls
+    assert any("/soccer/500/2922.png" in u for u in url_calls), url_calls
+    print("PASS  La Liga opponent crests download via ESPN team ids")
+
     for size in [(192, 32), (128, 32), (64, 32), (192, 64)]:
         for game in kept:
             display = FakeDisplay(*size)

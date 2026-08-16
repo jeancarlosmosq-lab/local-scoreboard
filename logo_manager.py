@@ -63,11 +63,31 @@ ESPN_ABBR_OVERRIDES: Dict[str, List[str]] = {
 # Soccer's crest CDN is keyed by ESPN's own numeric team id, not the
 # abbreviation the way every other league here is -- confirmed against a
 # real request, where the abbreviation path 404s and the numeric one
-# doesn't. Only entries actually configured need listing; add a team's
-# ESPN id here (visible in ESPN's own team URLs, /soccer/team/_/id/<id>)
-# the first time a new one is followed.
+# doesn't. Full 2025/26 La Liga table so every opponent Barça (or any
+# followed club) faces already has a crest without waiting on the game's
+# own team id. Cup opponents / new clubs still work when the scoreboard
+# carries competitor.team.id into get_logo(..., espn_id=...).
 ESPN_LOGO_ID_OVERRIDES: Dict[str, str] = {
-    "BAR": "83",  # Barcelona
+    "ALA": "96",    # Alaves
+    "ATH": "93",    # Athletic Club
+    "ATM": "1068",  # Atletico Madrid
+    "BAR": "83",    # Barcelona
+    "BET": "244",   # Real Betis
+    "CEL": "85",    # Celta Vigo
+    "DEP": "90",    # Deportivo (legacy / cup)
+    "ELC": "3751",  # Elche
+    "ESP": "88",    # Espanyol
+    "GET": "2922",  # Getafe
+    "LEV": "1538",  # Levante
+    "MCF": "99",    # Mallorca
+    "OSA": "97",    # Osasuna
+    "RAC": "87",    # Racing (legacy / cup)
+    "RAY": "101",   # Rayo Vallecano
+    "RMA": "86",    # Real Madrid
+    "RSO": "89",    # Real Sociedad
+    "SEV": "243",   # Sevilla
+    "VAL": "94",    # Valencia
+    "VIL": "102",   # Villarreal
 }
 
 # Plugin league keys that are not ESPN's crest CDN folder name. Games and
@@ -153,7 +173,8 @@ class TeamLogoManager:
             out.append(os.path.expanduser(template.format(league=league)))
         return out
 
-    def _download(self, league: str, abbr: str) -> Optional[str]:
+    def _download(self, league: str, abbr: str,
+                  espn_id: Optional[str] = None) -> Optional[str]:
         if not self.allow_download:
             return None
 
@@ -162,7 +183,16 @@ class TeamLogoManager:
 
         cdn_league = ESPN_LOGO_CDN_LEAGUE.get(league, league)
         for candidate in self._candidates(abbr):
-            url_path = ESPN_LOGO_ID_OVERRIDES.get(candidate, candidate.lower())
+            # Prefer an explicit ESPN team id (from the scoreboard payload)
+            # so cup opponents and newly promoted clubs still get a crest
+            # without a hard-coded override entry.
+            url_path = (
+                str(espn_id).strip()
+                if espn_id
+                else ESPN_LOGO_ID_OVERRIDES.get(candidate, candidate.lower())
+            )
+            if not url_path:
+                continue
             url = self.ESPN_LOGO_URL.format(league=cdn_league, abbr=url_path)
             try:
                 response = requests.get(url, timeout=10)
@@ -179,12 +209,15 @@ class TeamLogoManager:
         return None
 
     # ------------------------------------------------------------------
-    def get_logo(self, league: str, abbr: str, size: int) -> Optional[Image.Image]:
+    def get_logo(self, league: str, abbr: str, size: int,
+                 espn_id: Optional[str] = None) -> Optional[Image.Image]:
         """Return an RGBA logo scaled to fit a size x size box, or None.
 
         Called on the render path, so a miss is remembered and never retried
         within the session -- a Pi drawing 100 frames a second must not attempt
-        100 failed HTTP requests.
+        100 failed HTTP requests. Passing espn_id (soccer) retries a prior
+        abbr-only miss once, since the scoreboard often learns the numeric
+        id only after the first failed abbrev download.
         """
         abbr = (abbr or "").strip().upper()
         if not abbr or size < 3:
@@ -193,12 +226,17 @@ class TeamLogoManager:
         key = (league, abbr, size)
         if key in self._cache:
             return self._cache[key]
-        if (league, abbr) in self._misses:
+        miss_key = (league, abbr)
+        if miss_key in self._misses and not espn_id:
             return None
+        # A later call with a real ESPN id deserves one more try.
+        if miss_key in self._misses and espn_id:
+            self._misses.discard(miss_key)
 
-        path = self._find_on_disk(league, abbr) or self._download(league, abbr)
+        path = self._find_on_disk(league, abbr) or self._download(
+            league, abbr, espn_id=espn_id)
         if not path:
-            self._misses.add((league, abbr))
+            self._misses.add(miss_key)
             self._cache[key] = None
             return None
 
@@ -212,7 +250,7 @@ class TeamLogoManager:
             return logo
         except Exception as e:
             self.logger.debug(f"Could not open logo {path}: {e}")
-            self._misses.add((league, abbr))
+            self._misses.add(miss_key)
             self._cache[key] = None
             return None
 
@@ -387,9 +425,18 @@ class TeamLogoManager:
             return None
 
     def prefetch(self, pairs, size: int) -> int:
-        """Warm the cache off the render path, from (league, abbr) pairs."""
+        """Warm the cache off the render path.
+
+        Each entry is ``(league, abbr)`` or ``(league, abbr, espn_id)``.
+        Soccer needs the numeric id (or the override table) so La Liga
+        opponents download on refresh instead of blanking on first draw.
+        """
         loaded = 0
-        for league, abbr in pairs:
-            if self.get_logo(league, abbr, size) is not None:
+        for entry in pairs:
+            if len(entry) >= 3:
+                league, abbr, espn_id = entry[0], entry[1], entry[2] or None
+            else:
+                league, abbr, espn_id = entry[0], entry[1], None
+            if self.get_logo(league, abbr, size, espn_id=espn_id) is not None:
                 loaded += 1
         return loaded
