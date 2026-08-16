@@ -268,23 +268,7 @@ FLYERS: Dict[str, Tuple[Grid, ...]] = {
             (Y, _, Y, _, Y, _),
         ),
     ),
-    # Goofy face -- frame 0 grin, frame 1 wider mouth as it nears.
-    "face": (
-        (
-            (_, K, _, _, K, _),
-            (_, W, _, _, W, _),
-            (_, _, _, _, _, _),
-            (P, _, _, _, _, P),
-            (_, P, P, P, P, _),
-        ),
-        (
-            (_, K, _, _, K, _),
-            (_, W, _, _, W, _),
-            (_, _, R, R, _, _),
-            (P, _, R, R, _, P),
-            (_, P, P, P, P, _),
-        ),
-    ),
+    # Goofy face removed -- kids preferred animals/objects with depth instead.
     "bird": (
         (
             (_, _, W, _, _, _),
@@ -515,12 +499,10 @@ FLYERS: Dict[str, Tuple[Grid, ...]] = {
     ),
 }
 FLYER_ORDER: Tuple[str, ...] = (
-    "bee", "ufo", "face", "bird", "butterfly", "plane", "cat", "rocket",
+    "bee", "ufo", "bird", "butterfly", "plane", "cat", "rocket",
     "duck", "kite", "bat", "balloon", "bunny", "star", "dog", "dragon",
     "helicopter",
 )
-# Rush toward the viewer (grow) instead of crossing sideways.
-FLYER_ZOOM: Tuple[str, ...] = ("face", "star")
 
 # Pixels of horizontal / vertical room reserved around each sprite so a
 # bounce, wiggle, and flying wreckage never clips into neighbouring content.
@@ -779,11 +761,12 @@ def flyer_size(flyer_id: str, scale: int = 2) -> Tuple[int, int]:
 
 def apply_flyer(img, t: float, interval: float = 10.0,
                 flight: float = 2.8) -> Optional[str]:
-    """Bee / UFO fly across; face grows as if rushing toward the kids.
+    """Animals / objects fly across with depth (closer / further).
 
-    Every ``interval`` seconds something appears for ~``flight`` seconds,
-    then clears. Bee and UFO zip sideways; face starts tiny in the middle
-    and zooms up (coming at you). Returns the flyer id while active,
+    Every ``interval`` seconds something appears for ~``flight`` seconds.
+    Scale follows a hump: small (far) → big (close, mid-screen) → small
+    (far again), so it feels like it is flying past the kids in 3D, not
+    sliding flat across the glass. Returns the flyer id while active,
     or None while idle.
     """
     try:
@@ -805,25 +788,19 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     draw = _ID.Draw(img)
     frame = int(local * 10) % 2
 
-    if flyer_id in FLYER_ZOOM:
-        # Ease-in so it lingers small, then lunges at them.
-        zoom = progress * progress
-        max_scale = max(2, (h - 2) // 5)
-        scale = max(1, 1 + int(round(zoom * (max_scale - 1))))
-        if flyer_id == "face" and progress > 0.55:
-            frame = 1
-        fw, fh = flyer_size(flyer_id, scale=scale)
-        if fw <= 0:
-            return None
-        x = (w - fw) // 2
-        y = max(0, (h - fh) // 2)
-        if progress > 0.7:
-            x += int(round(math.sin(local * 25) * 2))
-            y += int(round(math.cos(local * 20) * 1))
-        blit_flyer(draw, x, y, flyer_id, scale=scale, frame=frame)
-        return flyer_id
+    # Depth: sin hump -- farthest at the edges, closest in the middle.
+    # Alternate cycles reverse the feel (start close / end far) by using
+    # a mirrored curve every other appearance.
+    depth = math.sin(progress * math.pi)  # 0..1..0
+    if cycle_i % 2 == 1:
+        # Receding-first: start closer, shrink as it leaves.
+        depth = 0.35 + 0.65 * (1.0 - progress)
+        depth = max(0.15, min(1.0, depth))
+    max_scale = max(3, (h - 2) // 5)
+    min_scale = 1
+    scale = max(min_scale,
+                min_scale + int(round(depth * (max_scale - min_scale))))
 
-    scale = 3 if h >= 28 else 2
     fw, fh = flyer_size(flyer_id, scale=scale)
     if fw <= 0:
         return None
@@ -835,13 +812,12 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     else:
         x = int(w - progress * travel)
 
-    bob = int(round(math.sin(progress * math.pi * 4) * 2))
-    # Balloon / kite drift a little higher; bat a little lower.
+    bob = int(round(math.sin(progress * math.pi * 4) * (1 + scale // 2)))
     if flyer_id in ("balloon", "kite", "helicopter"):
         bob -= 2
     elif flyer_id in ("bat", "cat", "dog", "bunny"):
         bob += 1
-    y = max(1, min(h - fh - 1, (h - fh) // 2 + bob))
+    y = max(0, min(h - fh, (h - fh) // 2 + bob))
     blit_flyer(draw, x, y, flyer_id, scale=scale, frame=frame)
     return flyer_id
 

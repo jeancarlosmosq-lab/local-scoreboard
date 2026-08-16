@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Simple kid gag: a bee or UFO flies across the screen, or a goofy face zooms in like it is coming at them. On automatically with Kid-Friendly Mode. Handmade sprites — not licensed characters.",
+      "description": "Simple kid gag: animals and flying objects cross the screen with depth (they look closer in the middle, farther at the edges). On automatically with Kid-Friendly Mode. Handmade sprites — not licensed characters.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -78,8 +78,8 @@
         },
         "flyers": {
           "type": "boolean",
-          "title": "Bee / UFO Flyovers",
-          "description": "Every so often an animal or flying object zips across (bee, bird, plane, rocket, …) or a face/star rushes toward the viewer. On by default.",
+          "title": "Animal / Object Flyovers",
+          "description": "Every so often a bee, bird, plane, rocket, etc. flies across with depth (grows closer mid-screen, then shrinks away). On by default.",
           "default": true
         },
         "flyer_interval": {

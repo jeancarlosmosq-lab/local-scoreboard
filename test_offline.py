@@ -4721,7 +4721,7 @@ def main():
     import kid_art as _kid_art
     assert set(_kid_art.SPRITE_ORDER) <= set(_kid_art.SPRITES)
     assert set(_kid_art.FLYER_ORDER) <= set(_kid_art.FLYERS)
-    # Flyer crosses, then clears. Face/star zoom toward the viewer.
+    # Flyer crosses with depth (small→big→small), then clears.
     fimg = Image.new("RGB", (192, 32), (10, 10, 10))
     assert _kid_art.apply_flyer(fimg, 1.0, interval=10, flight=2.8) == "bee"
     lit = sum(1 for y in range(32) for x in range(192)
@@ -4729,6 +4729,7 @@ def main():
     assert lit > 10, lit
     idle = Image.new("RGB", (192, 32), (10, 10, 10))
     assert _kid_art.apply_flyer(idle, 6.0, interval=10, flight=2.8) is None
+    assert "face" not in _kid_art.FLYERS and "face" not in _kid_art.FLYER_ORDER
     seen = set()
     for i in range(len(_kid_art.FLYER_ORDER)):
         stamp = Image.new("RGB", (192, 32), (0, 0, 0))
@@ -4739,18 +4740,16 @@ def main():
         assert sum(1 for y in range(32) for x in range(192)
                    if stamp.getpixel((x, y)) != (0, 0, 0)) > 5, fid
     assert seen == set(_kid_art.FLYER_ORDER)
-    # Face zooms: later in its flight covers more pixels.
-    face_i = _kid_art.FLYER_ORDER.index("face")
-    far = Image.new("RGB", (192, 32), (0, 0, 0))
-    near = Image.new("RGB", (192, 32), (0, 0, 0))
-    base = face_i * 10.0
-    assert _kid_art.apply_flyer(far, base + 0.3, interval=10, flight=2.8) == "face"
-    assert _kid_art.apply_flyer(near, base + 2.5, interval=10, flight=2.8) == "face"
-    lit_far = sum(1 for y in range(32) for x in range(192)
-                  if far.getpixel((x, y)) != (0, 0, 0))
-    lit_near = sum(1 for y in range(32) for x in range(192)
-                   if near.getpixel((x, y)) != (0, 0, 0))
-    assert lit_near > lit_far, (lit_far, lit_near)
+    # Depth: mid-flight (closest) covers more pixels than near the edge.
+    edge = Image.new("RGB", (192, 32), (0, 0, 0))
+    mid = Image.new("RGB", (192, 32), (0, 0, 0))
+    assert _kid_art.apply_flyer(edge, 0.2, interval=10, flight=2.8) == "bee"
+    assert _kid_art.apply_flyer(mid, 1.4, interval=10, flight=2.8) == "bee"
+    lit_edge = sum(1 for y in range(32) for x in range(192)
+                   if edge.getpixel((x, y)) != (0, 0, 0))
+    lit_mid = sum(1 for y in range(32) for x in range(192)
+                  if mid.getpixel((x, y)) != (0, 0, 0))
+    assert lit_mid > lit_edge, (lit_edge, lit_mid)
     picks = _kid_art.pick_sprites(15, count=2)
     assert len(picks) == 2 and picks[0] != picks[1]
     rfun = StripRenderer(
