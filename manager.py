@@ -1074,6 +1074,14 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         )
         if built is None:
             return False
+        regions = getattr(self.strip, "_fun_art_regions", None) or []
+        if regions and not getattr(self, "_fun_art_logged", False):
+            self._fun_art_logged = True
+            self.logger.info(
+                "Fun art wrecking bumpers on strip (%d): %s",
+                len(regions),
+                ", ".join(r[0] for r in regions),
+            )
         span = self.strip.scroll_span(built)
 
         now = time.time()

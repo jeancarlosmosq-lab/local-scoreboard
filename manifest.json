@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.63.2",
+  "version": "0.63.3",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.63.3",
+      "released": "2026-08-16",
+      "notes": "Fun-art much easier to spot: near full-panel sprites, brighter wreckage, bumper right after the clock and after every followed team (was easy to miss as two tiny sprites on a long strip)."
+    },
     {
       "version": "0.63.2",
       "released": "2026-08-16",

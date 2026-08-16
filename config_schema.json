@@ -79,10 +79,10 @@
         "count": {
           "type": "integer",
           "title": "Bumpers Per Lap",
-          "description": "How many little characters appear each full scroll (1–4). They rotate by the hour so the board stays fresh.",
-          "default": 2,
+          "description": "How many different characters to rotate (1–8). A wrecking bumper is placed right after the clock and again after every followed team, so they keep showing up on a long scroll.",
+          "default": 4,
           "minimum": 0,
-          "maximum": 4
+          "maximum": 8
         }
       }
     },

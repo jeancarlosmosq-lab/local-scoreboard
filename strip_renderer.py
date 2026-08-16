@@ -1866,9 +1866,22 @@ class StripRenderer:
         if not self._fun_art_enabled():
             return []
         cfg = self.config.get("fun_art") or {}
-        count = max(0, min(4, int(cfg.get("count", 2))))
+        # Default 4 -- two tiny bumpers on a long family strip were easy
+        # to miss entirely between weather, six teams, and leaderboards.
+        count = max(0, min(8, int(cfg.get("count", 4))))
         hour = clock.hour if clock is not None else 12
         return kid_art.pick_sprites(hour, count=count)
+
+    def _fun_art_queue(self, picks: List[str], slots: int) -> List[str]:
+        """Cycle picks to fill every placement slot (after clock, each team)."""
+        if not picks or slots <= 0:
+            return []
+        out: List[str] = []
+        i = 0
+        while len(out) < slots:
+            out.append(picks[i % len(picks)])
+            i += 1
+        return out
 
     def _draw_fun_bumper(self, img, draw, x: int, sprite_id: str,
                          font, row_h: int,
@@ -1876,12 +1889,13 @@ class StripRenderer:
         """A wrecking pixel character + cheer -- cracks and debris included.
 
         Handmade sprites (rocket, dino, bot, …) -- not licensed mascots.
-        The sprite column is wider than the character so refresh_fun_art
-        can paint flying wreckage without eating the next segment.
+        Near full-panel scale so kids actually notice them on a long strip.
         """
         start = x
         label = kid_art.label_for(sprite_id) or "Smash!"
-        scale = 2 if self.height >= 28 else 1
+        # Scale 3 on a 32-row panel (~24px tall) -- scale 2 was too easy
+        # to miss between scores and weather.
+        scale = 3 if self.height >= 28 else 2
         sw, sh = kid_art.sprite_size(sprite_id, scale=scale)
         if sw <= 0:
             return 0
@@ -1890,8 +1904,9 @@ class StripRenderer:
         sprite_x = x + pad_x
         base_oy = max(self.MARGIN + pad_y,
                       (self.height - sh) // 2)
+        # Keep the sprite inside the panel if scale 3 is tall.
+        base_oy = min(base_oy, max(self.MARGIN, self.height - sh - self.MARGIN))
         box_w = sw + pad_x * 2
-        # First paint: wreckage behind, character on top.
         kid_art.draw_wreckage(
             draw, x, box_w, self.height, sprite_id, 0.0,
             sprite_x + sw // 2, base_oy + sh // 2,
@@ -2514,7 +2529,8 @@ class StripRenderer:
         estimate += 280 if weather else 0
         estimate += 220 * len(other_live or []) + (120 if other_live else 0)
         estimate += 90 * len(countdowns or [])
-        estimate += 70 * len(fun_sprites)
+        # Bumpers after the clock and after every team -- budget per slot.
+        estimate += 110 * (1 + max(1, len(teams_and_games)))
         scratch = Image.new("RGB", (min(9000, estimate + 600), self.height),
                             (0, 0, 0))
         draw = ImageDraw.Draw(scratch)
@@ -2539,6 +2555,23 @@ class StripRenderer:
             x += added
             x += self._draw_divider(scratch, draw, x)
 
+        # Team list first so we know how many wrecking slots to fill.
+        other_live_queue = list(other_live or [])
+        team_entries = [
+            (team, games) for team, games in teams_and_games
+            if games or (team.get("favorite_player") or "").strip()
+        ]
+        # One bumper right after the clock (first thing kids see), then
+        # one after each followed team so they keep showing up on a long
+        # lap instead of twice in two thousand pixels of scores.
+        fun_queue = self._fun_art_queue(
+            fun_sprites, slots=1 + max(1, len(team_entries)))
+        if fun_queue:
+            x += self._draw_fun_bumper(
+                scratch, draw, x, fun_queue.pop(0), font, row_h,
+                regions=fun_regions)
+            x += self._draw_divider(scratch, draw, x)
+
         if weather:
             added = self._draw_weather(scratch, draw, x, weather, font, row_h,
                                        clock, show_forecast=weather_show_forecast,
@@ -2556,15 +2589,6 @@ class StripRenderer:
                     event.get("days", 0), font, row_h)
             x += self._draw_divider(scratch, draw, x)
 
-        # Original pixel bumpers for kids (rocket, dino, bot, …) -- not
-        # licensed characters. One early in the lap, extras mid-roster.
-        fun_queue = list(fun_sprites)
-        if fun_queue:
-            x += self._draw_fun_bumper(
-                scratch, draw, x, fun_queue.pop(0), font, row_h,
-                regions=fun_regions)
-            x += self._draw_divider(scratch, draw, x)
-
         # Other-live games are interleaved one at a time after each
         # followed team, instead of bunched into a single block at the
         # tail of the strip -- a game around the league used to sit
@@ -2575,13 +2599,6 @@ class StripRenderer:
         # second, and so on; any left over once the teams run out (more
         # live games elsewhere than followed teams) still get a
         # trailing section, same as the old single-block behaviour.
-        other_live_queue = list(other_live or [])
-
-        team_entries = [
-            (team, games) for team, games in teams_and_games
-            if games or (team.get("favorite_player") or "").strip()
-        ]
-        mid_fun_at = max(1, len(team_entries) // 2) if fun_queue else -1
 
         for team_i, (team, games) in enumerate(team_entries):
             fav = (team.get("favorite_player") or "").strip()
@@ -2653,7 +2670,8 @@ class StripRenderer:
                 )
                 x += self._draw_divider(scratch, draw, x)
 
-            if fun_queue and team_i + 1 == mid_fun_at:
+            # Wrecking character after each team so kids keep seeing them.
+            if fun_queue:
                 x += self._draw_fun_bumper(
                     scratch, draw, x, fun_queue.pop(0), font, row_h,
                     regions=fun_regions)

@@ -4772,6 +4772,7 @@ def main():
     without_fun = roff.build_strip([(team_a, [g_a])])
     assert with_fun.width > without_fun.width, (
         with_fun.width, without_fun.width)
+    assert len(rfun._fun_art_regions) >= 2, rfun._fun_art_regions
     print("PASS  kid fun-art bumpers draw, animate, and widen the strip")
 
     # Daily condensation: daytime highs only, Title Case labels, unit convert.
