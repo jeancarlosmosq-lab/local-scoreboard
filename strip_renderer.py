@@ -1816,7 +1816,7 @@ class StripRenderer:
         start = x
         clock = self._clock_text(now)
         try:
-            date = f"{now.strftime('%a').upper()} {now.month}/{now.day}"
+            date = f"{ESPNGamesSource.day_abbr(now)} {now.month}/{now.day}"
         except Exception:
             date = ""
 
@@ -2695,7 +2695,7 @@ class StripRenderer:
             clock_text = self._safe(self._clock_text(now, military=True))
             try:
                 date_text = self._safe(
-                    f"{now.strftime('%a').upper()} {now.month}/{now.day}")
+                    f"{ESPNGamesSource.day_abbr(now)} {now.month}/{now.day}")
             except Exception:
                 date_text = ""
 

@@ -410,10 +410,10 @@ def main():
     # board you glance at -- 7:05 tonight and 7:05 next Tuesday look the same.
     from datetime import datetime as _dt, timedelta as _td, timezone as _tz
     _now = _dt.now().astimezone()
-    for label, when, expect in [
-        ("today", _now.replace(hour=19, minute=5), "TDY"),
+    for label, when, expect_day in [
+        ("today", _now.replace(hour=19, minute=5), "Tdy"),
         ("in 3 days", _now + _td(days=3), None),
-        ("in 10 days", _now + _td(days=10), "/"),
+        ("in 10 days", _now + _td(days=10), None),
     ]:
         probe = {"start": when.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
         got = ESPNGamesSource.local_start(probe)
@@ -424,6 +424,16 @@ def main():
         assert len(parts) == 3, f"{label}: {got!r} is not day + date + time"
         assert "/" in parts[1], f"{label}: {got!r} has no month/day"
         assert ":" in parts[2], f"{label}: {got!r} has no time"
+        if expect_day:
+            assert parts[0] == expect_day, f"{label}: {got!r}"
+        else:
+            # Same Title Case as the forecast columns ("Mon", not "MON").
+            assert parts[0] == parts[0].title() and parts[0] != parts[0].upper(), (
+                f"{label}: day abbr should be Title Case like forecast: {got!r}"
+            )
+            assert parts[0] == ESPNGamesSource.day_abbr(when.astimezone()), (
+                f"{label}: {got!r}"
+            )
     assert ESPNGamesSource.local_start({}) == ""
     assert ESPNGamesSource.local_start({"start": "nonsense"}) == ""
     print("PASS  fixture labels always name a day, adding the date when needed")
@@ -2312,7 +2322,7 @@ def main():
     for label, game in (("final", final_game), ("upcoming", upcoming_game)):
         rone = StripRenderer(FakeDisplay(192, 32), {}, log, logo_manager=logos)
         one_strip = rone.build_strip([(full_team, [game])],
-                                     {"u1": "MON 8/11 7:05"})
+                                     {"u1": "Mon 8/11 7:05"})
         opx = one_strip.load()
         lit_rows = [y for y in range(32) for x in range(one_strip.width)
                    if opx[x, y] != (0, 0, 0)]

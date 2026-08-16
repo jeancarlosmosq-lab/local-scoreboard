@@ -931,11 +931,26 @@ class ESPNGamesSource:
         return None
 
     @staticmethod
+    def day_abbr(when: datetime, *, today: bool = False) -> str:
+        """Three-letter weekday in Title Case -- same as the forecast columns.
+
+        Forecast days render as "Mon", "Tue", …; fixture and clock labels
+        used to force ALL CAPS ("MON", "TDY"), which read as a different
+        voice on the same strip. "Tdy" keeps the today marker at three
+        letters in that same casing.
+        """
+        if today:
+            return "Tdy"
+        # %a is already Title Case in English locales; .title() still
+        # normalises any ALL-CAPS locale oddity to Mon/Tue/…
+        return (when.strftime("%a") or "")[:3].title()
+
+    @staticmethod
     def local_start(game: Dict) -> str:
         """When the next game is, in the shortest form that is unambiguous.
 
-            today       "TDY 8/9 7:05"
-            any other    "MON 8/11 7:05"
+            today       "Tdy 8/9 7:05"
+            any other    "Mon 8/11 7:05"
 
         Weekday, date and time together. The weekday alone repeats every
         seven days, and a bare clock time is ambiguous on a board you glance
@@ -959,5 +974,5 @@ class ESPNGamesSource:
         # Day name and date together, always. The weekday alone repeats every
         # seven days and the date alone makes you count -- a board you glance
         # at needs both.
-        day = "TDY" if delta == 0 else when.strftime("%a").upper()
+        day = ESPNGamesSource.day_abbr(when, today=(delta == 0))
         return f"{day} {when.month}/{when.day} {clock}"
