@@ -552,13 +552,90 @@ def _draw_silly_face(draw, cx: int, cy: int, scale: int = 2) -> None:
         [cx - scale, cy + 2 * scale, cx + scale - 1, cy + 4 * scale], fill=P)
 
 
-def apply_screen_chaos(img, t: float) -> str:
-    """Make the whole panel look cracked, interrupted, and a little silly.
+# Glass crack colours -- bright edge + cool shadow so it reads as a window.
+_GLASS = (230, 240, 255)
+_GLASS_EDGE = (160, 200, 255)
+_GLASS_SHADOW = (40, 50, 70)
 
-    Runs on the final frame (scores + static panel) so kids see the
-    *display itself* glitching -- not just a tiny bumper. Cycles through
-    calm cracks → spreading fractures → signal tears → a smash flash,
-    with rotating joke banners so it stays funny, not just noisy.
+
+def _put(img, x: int, y: int, colour) -> None:
+    w, h = img.size
+    if 0 <= x < w and 0 <= y < h:
+        img.putpixel((x, y), colour)
+
+
+def _draw_cracked_window(img, cx: int, cy: int, grow: float,
+                         seed: int, spokes: int = 10) -> None:
+    """Classic smashed-window spiderweb: radial cracks + ring fractures.
+
+    grow 0..1 controls how far the cracks have spread from the impact.
+    """
+    w, h = img.size
+    grow = max(0.15, min(1.0, grow))
+    max_r = math.hypot(max(cx, w - cx), max(cy, h - cy))
+
+    def rnd(i: int, mod: int) -> int:
+        return abs((seed * 1103515245 + i * 9973) >> 8) % max(1, mod)
+
+    # Impact chip at the hit point (the pebble mark).
+    for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1),
+                   (1, 1), (-1, 1), (1, -1), (-1, -1)):
+        _put(img, cx + dx, cy + dy, _GLASS)
+    _put(img, cx, cy, _FLASH)
+
+    # Radial spokes -- real glass cracks wander a little.
+    spoke_ends = []
+    for i in range(spokes):
+        ang = (i / spokes) * math.pi * 2 + (rnd(i, 7) - 3) * 0.04
+        length = int(max_r * grow * (0.55 + rnd(i + 3, 45) / 100.0))
+        px, py = cx, cy
+        for step in range(1, length + 1):
+            # Slight wander so lines aren't perfect rays.
+            wobble = (rnd(i * 40 + step, 5) - 2) * 0.015
+            a = ang + wobble
+            nx = int(round(cx + math.cos(a) * step))
+            ny = int(round(cy + math.sin(a) * step))
+            # Shadow pixel beside the bright crack (glass thickness).
+            _put(img, nx + 1, ny, _GLASS_SHADOW)
+            _put(img, nx, ny, _GLASS if step % 3 else _GLASS_EDGE)
+            # Occasional branch crack (secondary fracture).
+            if step > 4 and rnd(i * 50 + step, 18) == 0:
+                bang = a + (0.4 if rnd(step, 2) else -0.4)
+                for b in range(1, 3 + rnd(step, 4)):
+                    bx = int(round(nx + math.cos(bang) * b))
+                    by = int(round(ny + math.sin(bang) * b))
+                    _put(img, bx, by, _GLASS_EDGE)
+            px, py = nx, ny
+        spoke_ends.append((px, py, ang))
+
+    # Concentric ring cracks (the spiderweb circles) -- incomplete arcs
+    # between spokes, like real shattered glass.
+    rings = 2 + int(grow * 3)
+    for r_i in range(1, rings + 1):
+        radius = int(max_r * grow * (r_i / (rings + 1)))
+        if radius < 3:
+            continue
+        for i in range(spokes):
+            # Skip some segments so rings look broken, not perfect circles.
+            if rnd(r_i * 20 + i, 5) == 0:
+                continue
+            a0 = (i / spokes) * math.pi * 2
+            a1 = ((i + 1) / spokes) * math.pi * 2
+            steps = max(4, int(radius * (a1 - a0)))
+            for s in range(steps + 1):
+                a = a0 + (a1 - a0) * (s / max(1, steps))
+                px = int(round(cx + math.cos(a) * radius))
+                py = int(round(cy + math.sin(a) * radius))
+                _put(img, px, py, _GLASS)
+                _put(img, px, py + 1, _GLASS_SHADOW)
+
+
+def apply_screen_chaos(img, t: float) -> str:
+    """Overlay a cracked-window look on the whole panel.
+
+    The gag: the LED board looks like a pane of glass that got hit --
+    spiderweb fractures from an impact, spreading, then a second hit,
+    with a silly joke banner so kids laugh at the "broken window".
 
     Returns the active phase name (for tests / logging).
     """
@@ -571,128 +648,67 @@ def apply_screen_chaos(img, t: float) -> str:
     if w < 8 or h < 8:
         return "none"
 
-    # ~10s loop: fascinating without constant unreadability.
-    cycle = 10.0
+    # ~12s loop: window cracks grow, then a second smash, then a joke beat.
+    cycle = 12.0
     u = t % cycle
-    seed = int(t * 12)
+    seed = int(t * 8) + 17
     draw = _ID.Draw(img)
     gag = funny_gag(t)
 
     def rnd(i: int, mod: int) -> int:
         return abs((seed * 1103515245 + i * 9973) >> 8) % max(1, mod)
 
-    # --- Always-on hairline cracks (subtle "the glass is already broken")
-    for i in range(3):
-        x0 = rnd(i, w)
-        y0 = rnd(i + 3, h)
-        for step in range(w // 3):
-            x0 = (x0 + 1) % w
-            y0 = (y0 + (rnd(i * 20 + step, 3) - 1)) % h
-            if rnd(step + i, 4) != 0:
-                img.putpixel((x0, y0), _CRACK)
+    # Primary impact wanders slowly so the crack pattern moves over time.
+    cx = int((math.sin(t * 0.35) * 0.35 + 0.5) * (w - 1))
+    cy = int((math.cos(t * 0.45) * 0.35 + 0.5) * (h - 1))
+    cx = max(8, min(w - 9, cx))
+    cy = max(4, min(h - 5, cy))
 
-    if u < 3.5:
+    if u < 5.0:
         phase = "cracks"
-        # Spreading spiderweb from a moving smash point.
-        cx = int((math.sin(t * 0.7) * 0.5 + 0.5) * (w - 1))
-        cy = int((math.cos(t * 0.9) * 0.5 + 0.5) * (h - 1))
-        grow = 0.35 + (u / 3.5) * 0.65
-        for i in range(8):
-            ang = i * (math.pi / 4) + t * 0.4
-            length = int((6 + rnd(i, 10)) * grow)
-            for step in range(1, length + 1):
-                px = int(cx + math.cos(ang) * step) + rnd(step, 3) - 1
-                py = int(cy + math.sin(ang) * step * 0.7) + rnd(step + 1, 3) - 1
-                if 0 <= px < w and 0 <= py < h:
-                    img.putpixel((px, py), _CRACK if step % 2 else _STATIC)
-                    if px + 1 < w:
-                        img.putpixel((px + 1, py), _DEBRIS[i % len(_DEBRIS)])
-        # Tiny floating laugh near the end of the crack phase.
-        if u > 2.5:
-            _draw_gag_banner(draw, img, "HEHE", y=1)
+        # Growing spiderweb -- like watching a window crack in slow motion.
+        grow = 0.25 + (u / 5.0) * 0.75
+        _draw_cracked_window(img, cx, cy, grow, seed, spokes=10)
+        if u > 3.5:
+            _draw_gag_banner(draw, img, "UH OH", y=1)
 
-    elif u < 6.5:
-        phase = "glitch"
-        # Horizontal signal tears -- bands of the image shift sideways.
-        n_bands = 2 + rnd(1, 2)
-        for b in range(n_bands):
-            by = rnd(10 + b, max(1, h - 4))
-            bh = 2 + rnd(20 + b, 3)
-            shift = (rnd(30 + b, 17) - 8) * (1 if int(t * 8) % 2 == 0 else -1)
-            if shift == 0:
-                shift = 4
-            y1 = min(h, by + bh)
-            band = img.crop((0, by, w, y1))
-            # Clear the band then paste shifted (wrap).
-            draw.rectangle([0, by, w - 1, y1 - 1], fill=(0, 0, 0))
-            sx = shift % w
-            img.paste(band, (sx, by))
-            if sx > 0:
-                left = band.crop((w - sx, 0, w, band.height))
-                img.paste(left, (0, by))
-            # Bright tear edge.
-            draw.line([(0, by), (w - 1, by)], fill=_FLASH)
-            if y1 - 1 < h:
-                draw.line([(0, y1 - 1), (w - 1, y1 - 1)], fill=_DEBRIS[b % 3])
-
-        # Static snow flecks.
-        for i in range(w // 2):
+    elif u < 8.5:
+        phase = "shatter"
+        # Full primary web + a second hit elsewhere (window really broke).
+        _draw_cracked_window(img, cx, cy, 1.0, seed, spokes=11)
+        cx2 = (cx + w // 3 + rnd(2, 20)) % w
+        cy2 = (cy + h // 2 + rnd(3, 8)) % h
+        _draw_cracked_window(img, cx2, cy2, 0.55 + (u - 5.0) / 7.0, seed + 9,
+                             spokes=8)
+        # Tiny glass shards (glints), not TV static.
+        for i in range(12):
             px = rnd(40 + i, w)
             py = rnd(50 + i, h)
-            img.putpixel((px, py), _DEBRIS[rnd(i, len(_DEBRIS))])
-        _draw_gag_banner(draw, img, gag)
-
-    elif u < 8.0:
-        phase = "interrupt"
-        # "Signal interrupted" -- thick black bars + noisy flashes.
-        for bar in range(3):
-            by = rnd(60 + bar, max(1, h - 3))
-            bh = 2 + (bar % 2)
-            draw.rectangle([0, by, w - 1, min(h - 1, by + bh)], fill=(0, 0, 0))
-            for x in range(0, w, 2):
-                if rnd(x + bar, 3) == 0:
-                    img.putpixel((x, by), _FLASH)
-        # Vertical scramble columns.
-        for i in range(4):
-            cx = rnd(70 + i, w)
-            for y in range(h):
-                if rnd(y + i * 9, 2) == 0:
-                    img.putpixel((cx, y), _DEBRIS[rnd(y, len(_DEBRIS))])
-                    if cx + 1 < w:
-                        img.putpixel((cx + 1, y), (0, 0, 0))
-        _draw_gag_banner(draw, img, gag)
+            _put(img, px, py, _GLASS if rnd(i, 2) else _FLASH)
+        if u > 7.0:
+            _draw_gag_banner(draw, img, gag)
 
     else:
         phase = "smash"
-        # Brief full-panel smash: radial burst + white flash rim.
-        cx, cy = w // 2, h // 2
-        flash = (u - 8.0) < 0.35
+        # Impact flash + full shattered pane + goofy face in the hole.
+        _draw_cracked_window(img, w // 2, h // 2, 1.0, seed + 3, spokes=12)
+        _draw_cracked_window(img, cx, cy, 0.7, seed + 5, spokes=7)
+        flash = (u - 8.5) < 0.5
         if flash:
-            # Rim flash, keep centre mostly readable.
             for x in range(w):
-                img.putpixel((x, 0), _FLASH)
-                img.putpixel((x, h - 1), _FLASH)
+                _put(img, x, 0, _FLASH)
+                _put(img, x, h - 1, _FLASH)
             for y in range(h):
-                img.putpixel((0, y), _FLASH)
-                img.putpixel((w - 1, y), _FLASH)
+                _put(img, 0, y, _FLASH)
+                _put(img, w - 1, y, _FLASH)
+        # Falling glass chips.
         for i in range(16):
-            ang = i * (math.pi / 8) + t * 3
-            for step in range(1, max(w, h) // 2):
-                px = int(cx + math.cos(ang) * step)
-                py = int(cy + math.sin(ang) * step * 0.55)
-                if not (0 <= px < w and 0 <= py < h):
-                    break
-                if step < 4 or rnd(step + i, 3) != 0:
-                    img.putpixel((px, py), _FLASH if flash else _CRACK)
-        # Flying debris across the whole panel.
-        for i in range(20):
-            birth = ((t * 4 + i * 0.2) % 1.5)
-            ang = i * 0.55
-            px = int(cx + math.cos(ang) * birth * w * 0.6)
-            py = int(cy + math.sin(ang) * birth * h * 0.8 + birth * birth * 8)
-            if 0 <= px < w and 0 <= py < h:
-                img.putpixel((px, py), _DEBRIS[i % len(_DEBRIS)])
-        _draw_silly_face(draw, cx, max(6, cy - 4), scale=2)
+            birth = ((t * 3 + i * 0.25) % 1.2)
+            px = (cx + rnd(70 + i, w // 2) - w // 4) % w
+            py = int((cy + birth * birth * h)) % h
+            _put(img, px, py, _GLASS)
+            _put(img, px + 1, py, _GLASS_EDGE)
+        _draw_silly_face(draw, w // 2, max(6, h // 2 - 2), scale=2)
         _draw_gag_banner(draw, img, gag, y=h - 11)
 
     return phase

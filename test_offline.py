@@ -4780,14 +4780,21 @@ def main():
             chaos.putpixel((px, py), (40 + (px % 20), 80, 120))
     before_c = chaos.copy()
     phases = set()
-    for tt in (1.0, 4.5, 7.0, 8.5):
+    for tt in (1.0, 6.0, 10.0):
         frame = before_c.copy()
         phases.add(_kid_art.apply_screen_chaos(frame, tt))
         assert any(
             frame.getpixel((x, y)) != before_c.getpixel((x, y))
             for y in range(32) for x in range(0, 192, 4)
         ), tt
-    assert phases >= {"cracks", "glitch", "interrupt", "smash"}, phases
+    assert phases >= {"cracks", "shatter", "smash"}, phases
+    # Cracked-window spiderweb leaves bright glass pixels.
+    glass = before_c.copy()
+    _kid_art.apply_screen_chaos(glass, 4.0)
+    assert any(
+        glass.getpixel((x, y))[2] >= 200  # bluish-white glass crack
+        for y in range(32) for x in range(0, 192, 3)
+    )
     assert _kid_art.funny_gag(0) in _kid_art.FUNNY_GAGS
     assert _kid_art.funny_gag(25) != _kid_art.funny_gag(0)
     print("PASS  kid fun-art bumpers draw, animate, and widen the strip")

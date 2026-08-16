@@ -86,8 +86,8 @@
         },
         "screen_chaos": {
           "type": "boolean",
-          "title": "Whole Screen Cracks & Glitches",
-          "description": "The entire panel periodically cracks, tears sideways (signal interrupt), and flash-smashes — not just the little character bumpers. On by default with fun art; turn off if it is too distracting.",
+          "title": "Cracked Window Overlay",
+          "description": "The whole panel looks like a smashed window — spiderweb glass cracks from an impact, then a second hit, with silly joke banners. On by default with fun art; turn off if it is too distracting.",
           "default": true
         }
       }
