@@ -932,15 +932,14 @@ class ESPNGamesSource:
 
     @staticmethod
     def day_abbr(when: datetime, *, today: bool = False) -> str:
-        """Three-letter weekday in Title Case -- same as the forecast columns.
+        """Weekday label matching the forecast columns' Title Case.
 
         Forecast days render as "Mon", "Tue", …; fixture and clock labels
-        used to force ALL CAPS ("MON", "TDY"), which read as a different
-        voice on the same strip. "Tdy" keeps the today marker at three
-        letters in that same casing.
+        used to force ALL CAPS ("MON", "TDY"). Today is spelled out in full
+        -- it is short enough to read at a glance and clearer than "Tdy".
         """
         if today:
-            return "Tdy"
+            return "Today"
         # %a is already Title Case in English locales; .title() still
         # normalises any ALL-CAPS locale oddity to Mon/Tue/…
         return (when.strftime("%a") or "")[:3].title()
@@ -949,7 +948,7 @@ class ESPNGamesSource:
     def local_start(game: Dict) -> str:
         """When the next game is, in the shortest form that is unambiguous.
 
-            today       "Tdy 8/9 7:05"
+            today       "Today 8/9 7:05"
             any other    "Mon 8/11 7:05"
 
         Weekday, date and time together. The weekday alone repeats every

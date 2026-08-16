@@ -411,7 +411,7 @@ def main():
     from datetime import datetime as _dt, timedelta as _td, timezone as _tz
     _now = _dt.now().astimezone()
     for label, when, expect_day in [
-        ("today", _now.replace(hour=19, minute=5), "Tdy"),
+        ("today", _now.replace(hour=19, minute=5), "Today"),
         ("in 3 days", _now + _td(days=3), None),
         ("in 10 days", _now + _td(days=10), None),
     ]:
