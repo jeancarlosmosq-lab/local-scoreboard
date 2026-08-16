@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Simple kid gag: an original plumber (hard hat + wrench) crosses the screen with depth. On automatically with Kid-Friendly Mode. Handmade sprites — not licensed characters.",
+      "description": "Simple kid gag: original archetype characters (plumber, dino buddy, digger, spark critter, rescue pup, and more) cross the screen with depth. Handmade stand-ins — not licensed characters.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -78,8 +78,8 @@
         },
         "flyers": {
           "type": "boolean",
-          "title": "Plumber Flyovers",
-          "description": "Every so often the original plumber runs across with depth (grows closer mid-screen, then shrinks away). On by default.",
+          "title": "Character Flyovers",
+          "description": "Every so often an original kid character (plumber, chomp dino, helper, spark, digger, dasher, pup, bubbly, frost, webkid) runs across with depth. On by default.",
           "default": true
         },
         "flyer_interval": {

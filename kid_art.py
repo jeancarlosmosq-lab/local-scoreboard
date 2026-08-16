@@ -235,11 +235,13 @@ SPRITE_ORDER: Tuple[str, ...] = (
     "rocket", "dino", "bot", "kitty", "star", "ball", "comet", "fish",
 )
 
-# Original plumber only -- handmade, not licensed mascots.
-# Yoshi / Luigi / Mario cannot ship here (Nintendo IP).
+# Original kid archetypes -- handmade stand-ins for popular vibes.
+# Inspired by plumber / dino-buddy / block-miner / speedy / spark /
+# rescue-pup / ice kid / web hero tropes -- NOT licensed characters
+# (no Mario, Yoshi, Luigi, Minecraft, Pokemon, Sonic, etc.).
 # All fly with depth (scale up mid-screen, shrink at the edges).
 FLYERS: Dict[str, Tuple[Grid, ...]] = {
-    # Yellow hard hat, blue coveralls, wrench -- not a red-hat mascot.
+    # Hard-hat plumber with a wrench.
     "plumber": (
         (
             (_, Y, Y, Y, _, _),
@@ -258,9 +260,167 @@ FLYERS: Dict[str, Tuple[Grid, ...]] = {
             (_, B, _, _, B, _),
         ),
     ),
+    # Second helper -- teal beanie + plunger (not a green-hat twin).
+    "helper": (
+        (
+            (_, T, T, T, _, _),
+            (T, N, N, N, T, _),
+            (_, W, N, W, _, _),
+            (_, G, G, G, P, _),
+            (_, G, G, G, P, _),
+            (G, _, _, G, _, _),
+        ),
+        (
+            (_, T, T, T, _, _),
+            (T, N, N, N, T, _),
+            (_, W, N, W, _, _),
+            (P, G, G, G, _, _),
+            (P, G, G, G, _, _),
+            (_, G, _, _, G, _),
+        ),
+    ),
+    # Friendly green dino buddy with an orange belly (not a long-nose saddle dino).
+    "chomp": (
+        (
+            (_, _, G, G, _, _),
+            (_, G, W, G, G, _),
+            (G, G, G, O, G, _),
+            (_, G, O, O, _, _),
+            (G, _, _, _, G, _),
+        ),
+        (
+            (_, G, G, _, _, _),
+            (G, W, G, G, _, _),
+            (G, G, O, G, G, _),
+            (_, O, O, G, _, _),
+            (_, G, _, _, G, _),
+        ),
+    ),
+    # Blocky digger -- square head, pickaxe (not a Mojang skin).
+    "digger": (
+        (
+            (_, N, N, N, _, K),
+            (N, W, N, W, N, K),
+            (_, P, P, P, _, K),
+            (_, B, B, B, _, _),
+            (B, _, _, _, B, _),
+        ),
+        (
+            (K, _, N, N, N, _),
+            (K, N, W, N, W, N),
+            (K, _, P, P, P, _),
+            (_, _, B, B, B, _),
+            (_, B, _, _, _, B),
+        ),
+    ),
+    # Round yellow spark critter with a bolt (not a pocket monster).
+    "spark": (
+        (
+            (_, _, Y, _, _, _),
+            (_, Y, W, Y, _, _),
+            (Y, Y, Y, Y, Y, _),
+            (_, C, Y, C, _, _),
+            (Y, _, _, _, Y, _),
+        ),
+        (
+            (_, Y, _, Y, _, _),
+            (_, Y, W, Y, _, _),
+            (Y, Y, Y, Y, Y, _),
+            (_, C, Y, C, _, _),
+            (_, Y, _, Y, _, _),
+        ),
+    ),
+    # Speedy cyan runner with orange kicks (not a ring-collecting hedgehog).
+    "dasher": (
+        (
+            (_, C, C, C, _, _),
+            (C, W, C, W, C, _),
+            (_, C, C, C, _, _),
+            (C, C, C, C, C, _),
+            (O, _, _, _, O, _),
+        ),
+        (
+            (_, C, C, C, _, _),
+            (C, W, C, W, C, _),
+            (_, C, C, C, _, _),
+            (C, C, C, C, C, _),
+            (_, O, _, O, _, _),
+        ),
+    ),
+    # Square sea buddy with bubbles (not a licensed sponge).
+    "bubbly": (
+        (
+            (_, Y, Y, Y, _, _),
+            (Y, W, Y, W, Y, _),
+            (Y, Y, R, Y, Y, _),
+            (_, O, O, O, _, _),
+            (C, _, _, _, C, _),
+        ),
+        (
+            (_, Y, Y, Y, _, _),
+            (Y, W, Y, W, Y, _),
+            (Y, Y, R, Y, Y, _),
+            (_, O, O, O, _, _),
+            (_, C, _, C, _, _),
+        ),
+    ),
+    # Rescue pup with a badge (not a branded patrol).
+    "pup": (
+        (
+            (N, _, _, _, N, _),
+            (_, N, N, N, _, _),
+            (N, W, N, W, N, _),
+            (_, N, R, N, _, _),
+            (N, _, _, _, N, _),
+        ),
+        (
+            (_, N, _, N, _, _),
+            (_, N, N, N, _, _),
+            (N, W, N, W, N, _),
+            (_, N, R, N, _, _),
+            (_, N, _, _, N, _),
+        ),
+    ),
+    # Icy kid with a scarf (not a movie ice princess).
+    "frost": (
+        (
+            (_, C, C, C, _, _),
+            (C, W, N, W, C, _),
+            (_, N, N, N, _, _),
+            (P, P, B, P, P, _),
+            (_, B, B, B, _, _),
+            (B, _, _, _, B, _),
+        ),
+        (
+            (C, _, C, _, C, _),
+            (C, W, N, W, C, _),
+            (_, N, N, N, _, _),
+            (P, P, B, P, P, _),
+            (_, B, B, B, _, _),
+            (_, B, _, B, _, _),
+        ),
+    ),
+    # Purple/orange web hero (not a red-and-blue wall-crawler).
+    "webkid": (
+        (
+            (_, P, P, P, _, _),
+            (P, W, P, W, P, _),
+            (_, P, O, P, _, _),
+            (P, P, P, P, P, _),
+            (O, _, _, _, O, _),
+        ),
+        (
+            (_, P, P, P, _, _),
+            (P, W, P, W, P, _),
+            (_, P, O, P, _, _),
+            (P, P, P, P, P, _),
+            (_, O, _, O, _, _),
+        ),
+    ),
 }
 FLYER_ORDER: Tuple[str, ...] = (
-    "plumber",
+    "plumber", "chomp", "helper", "spark", "digger",
+    "dasher", "pup", "bubbly", "frost", "webkid",
 )
 
 # Pixels of horizontal / vertical room reserved around each sprite so a
@@ -571,7 +731,15 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     else:
         x = int(w - progress * travel)
 
-    bob = int(round(math.sin(progress * math.pi * 6) * (1 + scale // 2))) + 1
+    bob = int(round(math.sin(progress * math.pi * 4) * (1 + scale // 2)))
+    if flyer_id in ("plumber", "helper", "webkid"):
+        bob = int(round(math.sin(progress * math.pi * 6) * (1 + scale // 2))) + 1
+    elif flyer_id in ("dasher", "spark"):
+        bob = int(round(math.sin(progress * math.pi * 8) * (2 + scale // 2)))
+    elif flyer_id in ("frost", "bubbly"):
+        bob -= 1
+    elif flyer_id == "chomp":
+        bob = int(round(math.sin(progress * math.pi * 5) * (1 + scale // 2)))
     y = max(0, min(h - fh, (h - fh) // 2 + bob))
     blit_flyer(draw, x, y, flyer_id, scale=scale, frame=frame)
     return flyer_id

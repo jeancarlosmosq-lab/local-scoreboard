@@ -1079,8 +1079,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                 and getattr(self.strip, "_flyers_enabled", lambda: False)()):
             self._fun_art_logged = True
             self.logger.info(
-                "Fun art: plumber flyovers with depth "
-                "(closer mid-screen, farther at edges)"
+                "Fun art: original character flyovers with depth "
+                "(plumber, chomp, spark, digger, …)"
             )
         span = self.strip.scroll_span(built)
 

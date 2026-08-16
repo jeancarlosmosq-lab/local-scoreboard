@@ -4730,8 +4730,13 @@ def main():
     idle = Image.new("RGB", (192, 32), (10, 10, 10))
     assert _kid_art.apply_flyer(idle, 6.0, interval=10, flight=2.8) is None
     assert "face" not in _kid_art.FLYERS and "face" not in _kid_art.FLYER_ORDER
-    assert _kid_art.FLYER_ORDER == ("plumber",)
-    assert set(_kid_art.FLYERS) == {"plumber"}
+    assert _kid_art.FLYER_ORDER[0] == "plumber"
+    assert set(_kid_art.FLYER_ORDER) == set(_kid_art.FLYERS)
+    assert len(_kid_art.FLYER_ORDER) >= 8
+    # No licensed-name ids.
+    banned = {"mario", "luigi", "yoshi", "pikachu", "sonic", "spiderman",
+              "elsa", "minecraft", "steve", "creeper", "spongebob", "mickey"}
+    assert not (banned & set(_kid_art.FLYERS))
     seen = set()
     for i in range(len(_kid_art.FLYER_ORDER)):
         stamp = Image.new("RGB", (192, 32), (0, 0, 0))
