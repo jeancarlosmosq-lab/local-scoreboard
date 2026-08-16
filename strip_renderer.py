@@ -36,6 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 from espn_data_source import ESPNGamesSource, abbr_group
+import kid_art
 import moon_phase
 
 try:
@@ -1849,6 +1850,44 @@ class StripRenderer:
         w2 = self._measure(draw, bottom, font)[0]
         return (x + max(w1, w2) + 6) - start
 
+    def _fun_art_enabled(self) -> bool:
+        """Original pixel bumpers -- on with kid mode unless turned off."""
+        cfg = self.config.get("fun_art") or {}
+        if "enabled" in cfg:
+            return bool(cfg.get("enabled"))
+        return bool(self.kid_friendly)
+
+    def _fun_art_picks(self, clock=None) -> List[str]:
+        if not self._fun_art_enabled():
+            return []
+        cfg = self.config.get("fun_art") or {}
+        count = max(0, min(4, int(cfg.get("count", 2))))
+        hour = clock.hour if clock is not None else 12
+        return kid_art.pick_sprites(hour, count=count)
+
+    def _draw_fun_bumper(self, img, draw, x: int, sprite_id: str,
+                         font, row_h: int) -> int:
+        """A small original pixel character + cheer word for kids.
+
+        Handmade sprites (rocket, dino, bot, …) -- not licensed mascots.
+        Scale 2 keeps them readable on a 32-row panel without eating the
+        whole strip width.
+        """
+        start = x
+        label = kid_art.label_for(sprite_id) or "!"
+        scale = 2 if self.height >= 28 else 1
+        sw, sh = kid_art.sprite_size(sprite_id, scale=scale)
+        if sw <= 0:
+            return 0
+        oy = max(self.MARGIN, (self.height - sh) // 2)
+        kid_art.blit(draw, x, oy, sprite_id, scale=scale)
+        tx = x + sw + 3
+        start_row = self._vblock_start(row_h, 1)
+        top = self._text_top(draw, font, start_row, sample=label)
+        draw.text((tx, top), self._safe(label), font=font, fill=self.RIVALRY)
+        tw = self._measure(draw, label, font)[0]
+        return (tx + tw + 6) - start
+
     @staticmethod
     def _followed_side_won(game: Dict, focus_abbr: str) -> Optional[Dict]:
         """The followed side's competitor dict if they won this final."""
@@ -2101,9 +2140,11 @@ class StripRenderer:
         ruinous on a Pi that is also driving the matrix.
         """
         self.kid_friendly = bool(self.config.get("kid_friendly", False))
+        fun_sprites = self._fun_art_picks(clock)
         signature = (
             self.width, self.height,
             bool(self.kid_friendly),
+            tuple(fun_sprites),
             int(rivalry_live_boost or 0),
             tuple(
                 (entry[0], tuple((r.get("rank"), r.get("short_name"), r.get("value"))
@@ -2168,7 +2209,7 @@ class StripRenderer:
                 teams_and_games, start_labels, leaderboards, weather, clock,
                 awards, other_live, team_mvps, countdowns, streaks,
                 weather_show_forecast, show_clock, weather_show_current,
-                rivalry_live_boost,
+                rivalry_live_boost, self.kid_friendly, fun_sprites,
             )
             self._strip_key = signature
             self._strip_cache = strip
@@ -2192,6 +2233,7 @@ class StripRenderer:
                 weather, clock, awards, other_live, team_mvps, countdowns,
                 streaks, weather_show_forecast, show_clock,
                 weather_show_current, rivalry_live_boost,
+                self.kid_friendly, fun_sprites,
             )
         return self._strip_cache
 
@@ -2250,7 +2292,9 @@ class StripRenderer:
                                     weather_show_forecast=True,
                                     show_clock=True,
                                     weather_show_current=True,
-                                    rivalry_live_boost=0) -> None:
+                                    rivalry_live_boost=0,
+                                    kid_friendly: bool = False,
+                                    fun_sprites=None) -> None:
         """Compose the next strip off the render path, so the scroll
         never waits on it -- only the finished image, swapped in at
         adopt_pending()'s next seam, is ever shared back with the caller.
@@ -2266,6 +2310,7 @@ class StripRenderer:
         """
         self._dispatched_signature = signature
         self._last_build = time.time()
+        fun_sprites = list(fun_sprites or [])
 
         def _finish(strip, clock_state) -> None:
             with self._build_lock:
@@ -2290,11 +2335,15 @@ class StripRenderer:
         if self._use_process:
             self._ensure_compose_process()
             conn = self._compose_conn
+            # kid_friendly + fun_sprites travel with the request: the
+            # worker process builds StripRenderer with an empty config, so
+            # without these the kid-mode bumpers and tips would vanish on
+            # every background rebuild.
             request = (
                 teams_and_games, start_labels, leaderboards, weather, clock,
                 awards, other_live, team_mvps, countdowns, streaks,
                 weather_show_forecast, show_clock, weather_show_current,
-                rivalry_live_boost,
+                rivalry_live_boost, bool(kid_friendly), fun_sprites,
             )
 
             def _watch() -> None:
@@ -2345,7 +2394,7 @@ class StripRenderer:
                     teams_and_games, start_labels, leaderboards, weather,
                     clock, awards, other_live, team_mvps, countdowns, streaks,
                     weather_show_forecast, show_clock, weather_show_current,
-                    rivalry_live_boost,
+                    rivalry_live_boost, kid_friendly, fun_sprites,
                 )
             except Exception:
                 _fail("thread", exc_info=True)
@@ -2377,7 +2426,9 @@ class StripRenderer:
                        weather_show_forecast: bool = True,
                        show_clock: bool = True,
                        weather_show_current: bool = True,
-                       rivalry_live_boost: int = 0):
+                       rivalry_live_boost: int = 0,
+                       kid_friendly: Optional[bool] = None,
+                       fun_sprites=None):
         """The actual drawing work -- tens of milliseconds, hundreds on a
         Pi. Safe to run off the main thread: everything it touches is
         either local to this call (the scratch canvas, its font) or the
@@ -2389,6 +2440,9 @@ class StripRenderer:
         attributes only once this composition is actually adopted, not
         during composition itself.
         """
+        if kid_friendly is not None:
+            self.kid_friendly = bool(kid_friendly)
+        fun_sprites = list(fun_sprites or [])
         start_labels = start_labels or {}
 
         # The strip is as wide as its content, and the content is only known
@@ -2403,6 +2457,7 @@ class StripRenderer:
         estimate += 280 if weather else 0
         estimate += 220 * len(other_live or []) + (120 if other_live else 0)
         estimate += 90 * len(countdowns or [])
+        estimate += 70 * len(fun_sprites)
         scratch = Image.new("RGB", (min(9000, estimate + 600), self.height),
                             (0, 0, 0))
         draw = ImageDraw.Draw(scratch)
@@ -2444,6 +2499,14 @@ class StripRenderer:
                     event.get("days", 0), font, row_h)
             x += self._draw_divider(scratch, draw, x)
 
+        # Original pixel bumpers for kids (rocket, dino, bot, …) -- not
+        # licensed characters. One early in the lap, extras mid-roster.
+        fun_queue = list(fun_sprites)
+        if fun_queue:
+            x += self._draw_fun_bumper(
+                scratch, draw, x, fun_queue.pop(0), font, row_h)
+            x += self._draw_divider(scratch, draw, x)
+
         # Other-live games are interleaved one at a time after each
         # followed team, instead of bunched into a single block at the
         # tail of the strip -- a game around the league used to sit
@@ -2456,10 +2519,14 @@ class StripRenderer:
         # trailing section, same as the old single-block behaviour.
         other_live_queue = list(other_live or [])
 
-        for team, games in teams_and_games:
+        team_entries = [
+            (team, games) for team, games in teams_and_games
+            if games or (team.get("favorite_player") or "").strip()
+        ]
+        mid_fun_at = max(1, len(team_entries) // 2) if fun_queue else -1
+
+        for team_i, (team, games) in enumerate(team_entries):
             fav = (team.get("favorite_player") or "").strip()
-            if not games and not fav:
-                continue
             streak = (streaks or {}).get(team.get("abbr", ""), "")
             x += self._draw_banner(scratch, draw, x, team, font, row_h, streak)
             x += self._draw_divider(scratch, draw, x)
@@ -2528,6 +2595,11 @@ class StripRenderer:
                 )
                 x += self._draw_divider(scratch, draw, x)
 
+            if fun_queue and team_i + 1 == mid_fun_at:
+                x += self._draw_fun_bumper(
+                    scratch, draw, x, fun_queue.pop(0), font, row_h)
+                x += self._draw_divider(scratch, draw, x)
+
         # Anything left over -- more live games elsewhere than followed
         # teams with games to trail -- closes out the same way the whole
         # section used to: one banner, then every remaining game.
@@ -2540,6 +2612,11 @@ class StripRenderer:
                     performer=ESPNGamesSource.pick_performer(game, ""),
                 )
                 x += self._draw_divider(scratch, draw, x)
+
+        while fun_queue:
+            x += self._draw_fun_bumper(
+                scratch, draw, x, fun_queue.pop(0), font, row_h)
+            x += self._draw_divider(scratch, draw, x)
 
         # League leaders after the teams, behind a section banner: the block
         # changes subject from "my teams" to "the league", and the reader

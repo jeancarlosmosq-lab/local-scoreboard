@@ -62,8 +62,29 @@
     "kid_friendly": {
       "type": "boolean",
       "title": "Kid-Friendly Mode",
-      "description": "Weather tips kids can use (Jacket / Umbrella), simpler football and soccer wording, a short Win! cheer after a followed team's final, and plainer leaderboard and trophy-race titles. Aimed at a family board kids actually read.",
+      "description": "Weather tips kids can use (Jacket / Umbrella), simpler football and soccer wording, a short Win! cheer after a followed team's final, plainer leaderboard titles, and occasional original pixel-art bumpers (rocket, dino, bot, kitty — handmade, not licensed characters). Aimed at a family board kids actually read.",
       "default": false
+    },
+    "fun_art": {
+      "type": "object",
+      "title": "Fun Pixel Art",
+      "description": "Small original pixel characters that scroll by every so often. On automatically when Kid-Friendly Mode is on; turn off here if you want kid tips without the art. These are handmade sprites — not Mario, Pokemon, or other licensed mascots.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Show Fun Art",
+          "description": "Leave unset to follow Kid-Friendly Mode. Set true/false to force on or off.",
+          "default": true
+        },
+        "count": {
+          "type": "integer",
+          "title": "Bumpers Per Lap",
+          "description": "How many little characters appear each full scroll (1–4). They rotate by the hour so the board stays fresh.",
+          "default": 2,
+          "minimum": 0,
+          "maximum": 4
+        }
+      }
     },
     "other_live_games": {
       "type": "object",

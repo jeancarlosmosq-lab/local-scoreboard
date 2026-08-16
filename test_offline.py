@@ -4717,6 +4717,43 @@ def main():
     assert any("Lamine Yamal" in str(t) for t in fspy.texts)
     print("PASS  favorite_player prefers Yamal and draws a Star note")
 
+    # Original fun-art bumpers (not licensed characters) show under kid mode.
+    import kid_art as _kid_art
+    assert set(_kid_art.SPRITE_ORDER) <= set(_kid_art.SPRITES)
+    picks = _kid_art.pick_sprites(15, count=2)
+    assert len(picks) == 2 and picks[0] != picks[1]
+    rfun = StripRenderer(
+        FakeDisplay(192, 32),
+        {"kid_friendly": True, "fun_art": {"enabled": True, "count": 2}},
+        log,
+    )
+    assert rfun._fun_art_enabled()
+    assert rfun._fun_art_picks(type("C", (), {"hour": 15})()) == picks
+    fimg2 = Image.new("RGB", (120, 32), (0, 0, 0))
+    fdraw2 = _KidID.Draw(fimg2)
+    ffont2, frow2 = rfun._fit_font(fdraw2, 3, 32)
+    bw = rfun._draw_fun_bumper(fimg2, fdraw2, 2, "rocket", ffont2, frow2)
+    lit = sum(1 for y in range(32) for x in range(min(80, bw + 2))
+              if fimg2.getpixel((x, y)) != (0, 0, 0))
+    assert bw > 20 and lit > 30, (bw, lit)
+    team_a = {"abbr": "NYY", "league": "mlb", "name": "Yankees"}
+    g_a = {
+        "id": "fun1", "league": "mlb", "state": STATE_FINAL, "start": "",
+        "home": {"abbr": "NYY", "score": "5", "winner": True},
+        "away": {"abbr": "BOS", "score": "3", "winner": False},
+        "situation": {}, "leaders": [],
+    }
+    with_fun = rfun.build_strip([(team_a, [g_a])])
+    roff = StripRenderer(
+        FakeDisplay(192, 32),
+        {"kid_friendly": True, "fun_art": {"enabled": False}},
+        log,
+    )
+    without_fun = roff.build_strip([(team_a, [g_a])])
+    assert with_fun.width > without_fun.width, (
+        with_fun.width, without_fun.width)
+    print("PASS  kid fun-art bumpers draw and widen the strip")
+
     # Daily condensation: daytime highs only, Title Case labels, unit convert.
     wx_daily = NWSWeather(log, 40.66, -74.11, units="C")
     condensed = wx_daily._condense_daily([
