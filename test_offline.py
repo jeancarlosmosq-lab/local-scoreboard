@@ -4723,21 +4723,22 @@ def main():
     assert set(_kid_art.FLYER_ORDER) <= set(_kid_art.FLYERS)
     # Flyer crosses with depth (small→big→small), then clears.
     fimg = Image.new("RGB", (192, 32), (10, 10, 10))
-    assert _kid_art.apply_flyer(fimg, 1.0, interval=10, flight=2.8) == "hawk"
+    assert _kid_art.apply_flyer(fimg, 1.0, interval=10, flight=2.8) == "soccer"
     lit = sum(1 for y in range(32) for x in range(192)
               if fimg.getpixel((x, y)) != (10, 10, 10))
     assert lit > 10, lit
     idle = Image.new("RGB", (192, 32), (10, 10, 10))
     assert _kid_art.apply_flyer(idle, 6.0, interval=10, flight=2.8) is None
     assert "face" not in _kid_art.FLYERS and "face" not in _kid_art.FLYER_ORDER
-    assert _kid_art.FLYER_ORDER[0] == "hawk"
+    assert "moon" not in _kid_art.FLYERS
+    assert _kid_art.FLYER_ORDER[0] == "soccer"
+    assert "hawk" in _kid_art.FLYER_ORDER
     assert set(_kid_art.FLYER_ORDER) == set(_kid_art.FLYERS)
-    assert len(_kid_art.FLYER_ORDER) >= 8
-    # No licensed-name / cartoon-mascot ids.
+    assert len(_kid_art.FLYER_ORDER) >= 4
     banned = {"mario", "luigi", "yoshi", "pikachu", "sonic", "spiderman",
               "elsa", "minecraft", "steve", "creeper", "spongebob", "mickey",
               "plumber", "chomp", "helper", "spark", "digger", "dasher",
-              "bubbly", "webkid", "frost", "pup"}
+              "bubbly", "webkid", "frost", "pup", "moon"}
     assert not (banned & set(_kid_art.FLYERS))
     seen = set()
     for i in range(len(_kid_art.FLYER_ORDER)):
@@ -4752,8 +4753,8 @@ def main():
     # Depth: mid-flight (closest) covers more pixels than near the edge.
     edge = Image.new("RGB", (192, 32), (0, 0, 0))
     mid = Image.new("RGB", (192, 32), (0, 0, 0))
-    assert _kid_art.apply_flyer(edge, 0.2, interval=10, flight=2.8) == "hawk"
-    assert _kid_art.apply_flyer(mid, 1.4, interval=10, flight=2.8) == "hawk"
+    assert _kid_art.apply_flyer(edge, 0.2, interval=10, flight=2.8) == "soccer"
+    assert _kid_art.apply_flyer(mid, 1.4, interval=10, flight=2.8) == "soccer"
     lit_edge = sum(1 for y in range(32) for x in range(192)
                    if edge.getpixel((x, y)) != (0, 0, 0))
     lit_mid = sum(1 for y in range(32) for x in range(192)

@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Simple kid gag: shaded realistic flyovers (hawk, cardinal, dolphin, soccer ball, jet, and more) cross the screen with depth. Handmade pixel art — not licensed characters.",
+      "description": "Soft-shaded realistic flyovers (soccer ball, hawk, baseball, dolphin, cardinal, fox) painted large then downscaled for the LED. No licensed characters.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -78,8 +78,8 @@
         },
         "flyers": {
           "type": "boolean",
-          "title": "Realistic Flyovers",
-          "description": "Every so often a shaded nature or sports subject (hawk, soccer, cardinal, dolphin, fox, jet, monarch, baseball, sailboat, goldfish) crosses with depth. On by default.",
+          "title": "Soft-Shaded Flyovers",
+          "description": "Every so often a soft-shaded soccer ball, hawk, baseball, dolphin, cardinal, or fox crosses with depth. On by default.",
           "default": true
         },
         "flyer_interval": {
