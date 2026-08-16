@@ -68,7 +68,7 @@
     "fun_art": {
       "type": "object",
       "title": "Fun Pixel Art",
-      "description": "Simple kid gag: original archetype characters (plumber, dino buddy, digger, spark critter, rescue pup, and more) cross the screen with depth. Handmade stand-ins — not licensed characters.",
+      "description": "Simple kid gag: shaded realistic flyovers (hawk, cardinal, dolphin, soccer ball, jet, and more) cross the screen with depth. Handmade pixel art — not licensed characters.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -78,8 +78,8 @@
         },
         "flyers": {
           "type": "boolean",
-          "title": "Character Flyovers",
-          "description": "Every so often an original kid character (plumber, chomp dino, helper, spark, digger, dasher, pup, bubbly, frost, webkid) runs across with depth. On by default.",
+          "title": "Realistic Flyovers",
+          "description": "Every so often a shaded nature or sports subject (hawk, soccer, cardinal, dolphin, fox, jet, monarch, baseball, sailboat, goldfish) crosses with depth. On by default.",
           "default": true
         },
         "flyer_interval": {

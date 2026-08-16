@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.65.7",
+  "version": "0.65.8",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.65.8",
+      "released": "2026-08-16",
+      "notes": "Replace cartoon mascot stand-ins with shaded realistic flyovers (hawk, cardinal, monarch, dolphin, fox, soccer, baseball, jet, sailboat, goldfish). Smaller scale so detail reads better on the panel."
+    },
     {
       "version": "0.65.7",
       "released": "2026-08-16",

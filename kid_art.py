@@ -28,6 +28,19 @@ C = (120, 220, 255)    # cyan
 P = (220, 120, 200)    # pink
 N = (180, 120, 70)     # brown
 T = (90, 200, 170)     # teal
+# Extra tones for shaded / more realistic flyovers.
+RD = (160, 35, 45)     # dark red
+RL = (255, 110, 115)   # light red
+ND = (110, 70, 40)     # dark brown
+NL = (210, 165, 110)   # light tan / cream
+GD = (35, 110, 55)     # dark green
+GL = (120, 210, 130)   # light green
+BD = (35, 70, 140)     # dark blue
+BL = (150, 195, 255)   # light blue
+GY = (130, 135, 145)   # gray
+SG = (185, 190, 200)   # silver
+SK = (255, 195, 155)   # peach / warm highlight
+GO = (220, 170, 40)    # gold
 
 Grid = Tuple[Tuple[Optional[Tuple[int, int, int]], ...], ...]
 Sprite = Tuple[str, str, Tuple[Grid, ...]]
@@ -235,190 +248,190 @@ SPRITE_ORDER: Tuple[str, ...] = (
     "rocket", "dino", "bot", "kitty", "star", "ball", "comet", "fish",
 )
 
-# Original kid archetypes -- handmade stand-ins for popular vibes.
-# Colors lean toward the familiar looks kids know; shapes stay original
-# (no logos / mustaches / trademarked marks). All fly with depth.
+# Realistic shaded flyovers -- nature + sports kids recognize.
+# Larger base grids + limited scale so they look detailed, not chunky
+# cartoon blocks. Handmade; not licensed characters.
 FLYERS: Dict[str, Tuple[Grid, ...]] = {
-    # Plumber -- red hat/shirt, blue overalls, brown shoes (Mario colors).
-    "plumber": (
+    # Red-tailed hawk in flight (wing flap).
+    "hawk": (
         (
-            (_, R, R, R, _, _),
-            (R, N, N, N, R, _),
-            (_, W, N, W, _, _),
-            (_, B, Y, B, _, _),
-            (_, B, B, B, _, _),
-            (N, _, _, _, N, _),
+            (_, _, ND, _, _, ND, _, _),
+            (_, N, NL, N, N, NL, N, _),
+            (ND, N, N, SK, SK, N, N, ND),
+            (_, _, N, N, N, N, _, _),
+            (_, _, _, ND, ND, _, _, _),
         ),
         (
-            (_, R, R, R, _, _),
-            (R, N, N, N, R, _),
-            (_, W, N, W, _, _),
-            (_, B, Y, B, _, _),
-            (_, B, B, B, _, _),
-            (_, N, _, N, _, _),
+            (ND, _, _, _, _, _, _, ND),
+            (_, N, NL, N, N, NL, N, _),
+            (_, ND, N, SK, SK, N, ND, _),
+            (_, _, N, N, N, N, _, _),
+            (_, _, _, ND, ND, _, _, _),
         ),
     ),
-    # Helper -- green hat/shirt, blue overalls (Luigi colors).
-    "helper": (
+    # Northern cardinal on a perch / hop.
+    "cardinal": (
         (
-            (_, G, G, G, _, _),
-            (G, N, N, N, G, _),
-            (_, W, N, W, _, _),
-            (_, B, Y, B, _, _),
-            (_, B, B, B, _, _),
-            (N, _, _, _, N, _),
+            (_, _, RL, _, _, _),
+            (_, R, R, R, _, _),
+            (R, W, R, R, R, _),
+            (_, R, R, R, RD, _),
+            (_, _, R, _, R, _),
+            (_, _, ND, _, ND, _),
         ),
         (
-            (_, G, G, G, _, _),
-            (G, N, N, N, G, _),
-            (_, W, N, W, _, _),
-            (_, B, Y, B, _, _),
-            (_, B, B, B, _, _),
-            (_, N, _, N, _, _),
-        ),
-    ),
-    # Chomp -- green body, cream belly, red shoes (Yoshi colors).
-    "chomp": (
-        (
-            (_, _, G, G, _, _),
-            (_, G, W, G, G, _),
-            (G, G, G, W, G, _),
-            (_, G, W, W, _, _),
-            (R, _, _, _, R, _),
-        ),
-        (
-            (_, G, G, _, _, _),
-            (G, W, G, G, _, _),
-            (G, G, W, G, G, _),
-            (_, W, W, G, _, _),
+            (_, _, RL, _, _, _),
+            (_, R, R, R, _, _),
+            (R, W, R, R, R, _),
+            (_, R, R, R, RD, _),
             (_, R, _, R, _, _),
+            (_, ND, _, ND, _, _),
         ),
     ),
-    # Digger -- brown hair, teal shirt, blue pants (Steve colors).
-    "digger": (
+    # Monarch-style butterfly (wing beat).
+    "monarch": (
         (
-            (_, N, N, N, _, K),
-            (N, W, N, W, N, K),
-            (_, T, T, T, _, K),
-            (_, B, B, B, _, _),
-            (N, _, _, _, N, _),
+            (O, Y, _, _, Y, O),
+            (O, O, K, K, O, O),
+            (Y, O, K, K, O, Y),
+            (O, O, _, _, O, O),
+            (O, _, _, _, _, O),
         ),
         (
-            (K, _, N, N, N, _),
-            (K, N, W, N, W, N),
-            (K, _, T, T, T, _),
-            (_, _, B, B, B, _),
-            (_, N, _, _, _, N),
-        ),
-    ),
-    # Spark -- yellow body, red cheeks, dark ear tips (Pikachu colors).
-    "spark": (
-        (
-            (K, _, Y, _, K, _),
-            (_, Y, W, Y, _, _),
-            (Y, R, Y, R, Y, _),
-            (_, Y, Y, Y, _, _),
-            (Y, _, _, _, Y, _),
-        ),
-        (
-            (_, K, Y, K, _, _),
-            (_, Y, W, Y, _, _),
-            (Y, R, Y, R, Y, _),
-            (_, Y, Y, Y, _, _),
-            (_, Y, _, Y, _, _),
+            (_, O, Y, Y, O, _),
+            (O, O, K, K, O, O),
+            (_, O, K, K, O, _),
+            (O, Y, _, _, Y, O),
+            (_, _, _, _, _, _),
         ),
     ),
-    # Dasher -- blue body, peach muzzle, red shoes (Sonic colors).
-    "dasher": (
+    # Bottlenose dolphin leap.
+    "dolphin": (
         (
-            (_, B, B, B, _, _),
-            (B, W, B, W, B, _),
-            (_, B, W, B, _, _),
-            (B, B, B, B, B, _),
-            (R, W, _, W, R, _),
+            (_, _, GY, SG, _, _, _),
+            (_, GY, SG, SG, GY, _, _),
+            (BD, GY, W, GY, GY, SG, _),
+            (_, _, GY, GY, GY, _, _),
+            (_, _, _, BL, _, _, _),
         ),
         (
-            (_, B, B, B, _, _),
-            (B, W, B, W, B, _),
-            (_, B, W, B, _, _),
-            (B, B, B, B, B, _),
-            (_, R, W, R, _, _),
+            (_, _, _, GY, SG, _, _),
+            (_, GY, SG, SG, GY, _, _),
+            (BD, GY, W, GY, GY, SG, _),
+            (_, GY, GY, GY, _, _, _),
+            (_, BL, _, _, BL, _, _),
         ),
     ),
-    # Bubbly -- yellow square, brown pants, red tie (SpongeBob colors).
-    "bubbly": (
+    # Red fox trot.
+    "fox": (
         (
-            (_, Y, Y, Y, _, _),
-            (Y, W, Y, W, Y, _),
-            (Y, Y, R, Y, Y, _),
+            (O, _, _, _, O, _),
+            (_, O, O, O, _, _),
+            (O, K, O, K, O, _),
+            (_, O, W, O, O, _),
+            (O, ND, _, ND, O, _),
+            (ND, _, _, _, ND, _),
+        ),
+        (
+            (_, O, _, O, _, _),
+            (_, O, O, O, _, _),
+            (O, K, O, K, O, _),
+            (_, O, W, O, O, _),
+            (_, ND, O, ND, _, _),
+            (_, ND, _, _, ND, _),
+        ),
+    ),
+    # Soccer ball (rotate panels).
+    "soccer": (
+        (
+            (_, K, W, W, K, _),
+            (W, K, W, K, W, W),
+            (W, W, K, W, K, W),
+            (K, W, W, K, W, K),
+            (_, K, W, W, K, _),
+        ),
+        (
+            (_, W, K, W, W, _),
+            (K, W, W, K, W, K),
+            (W, K, W, W, K, W),
+            (W, W, K, W, W, K),
+            (_, K, W, K, W, _),
+        ),
+    ),
+    # Baseball with red stitches.
+    "baseball": (
+        (
+            (_, W, W, W, W, _),
+            (W, W, R, W, W, W),
+            (W, R, W, W, R, W),
+            (W, W, W, R, W, W),
+            (_, W, W, W, W, _),
+        ),
+        (
+            (_, W, W, W, W, _),
+            (W, W, W, R, W, W),
+            (W, R, W, W, R, W),
+            (W, W, R, W, W, W),
+            (_, W, W, W, W, _),
+        ),
+    ),
+    # Passenger jet.
+    "jet": (
+        (
+            (_, _, _, W, _, _, _, _),
+            (SG, SG, SG, SG, SG, SG, SG, R),
+            (BL, W, SG, SG, W, SG, SG, _),
+            (_, _, SG, SG, SG, _, _, _),
+            (_, W, _, SG, _, W, _, _),
+        ),
+        (
+            (_, _, _, W, _, _, _, _),
+            (SG, SG, SG, SG, SG, SG, SG, R),
+            (BL, W, SG, SG, W, SG, SG, _),
+            (_, _, SG, SG, SG, _, _, _),
+            (W, _, _, SG, _, _, W, _),
+        ),
+    ),
+    # Sailboat on water.
+    "sailboat": (
+        (
+            (_, _, W, _, _, _),
+            (_, W, W, W, _, _),
             (W, W, W, W, W, _),
-            (_, N, N, N, _, _),
+            (_, _, N, _, _, _),
+            (BD, B, B, B, B, BD),
+            (_, BL, BL, BL, _, _),
         ),
         (
-            (_, Y, Y, Y, _, _),
-            (Y, W, Y, W, Y, _),
-            (Y, Y, R, Y, Y, _),
-            (W, W, W, W, W, _),
-            (N, _, N, _, N, _),
-        ),
-    ),
-    # Pup -- blue coat + badge (Chase-style rescue colors).
-    "pup": (
-        (
-            (N, _, _, _, N, _),
-            (_, N, N, N, _, _),
-            (N, W, N, W, N, _),
-            (_, B, Y, B, _, _),
-            (B, _, _, _, B, _),
-        ),
-        (
-            (_, N, _, N, _, _),
-            (_, N, N, N, _, _),
-            (N, W, N, W, N, _),
-            (_, B, Y, B, _, _),
-            (_, B, _, B, _, _),
+            (_, _, _, W, _, _),
+            (_, _, W, W, W, _),
+            (_, W, W, W, W, W),
+            (_, _, N, _, _, _),
+            (BD, B, B, B, B, BD),
+            (BL, _, BL, _, BL, _),
         ),
     ),
-    # Frost -- icy blonde hair, ice-blue dress (Elsa colors).
-    "frost": (
+    # Goldfish swim.
+    "goldfish": (
         (
-            (_, W, C, W, _, _),
-            (W, W, N, W, W, _),
-            (_, W, N, W, _, _),
-            (C, C, C, C, C, _),
-            (_, C, C, C, _, _),
-            (C, _, _, _, C, _),
+            (_, _, O, O, _, _),
+            (_, O, W, O, O, O),
+            (O, O, K, O, O, _),
+            (_, O, O, O, _, O),
+            (_, _, O, _, _, _),
         ),
         (
-            (W, _, C, _, W, _),
-            (W, W, N, W, W, _),
-            (_, W, N, W, _, _),
-            (C, C, C, C, C, _),
-            (_, C, C, C, _, _),
-            (_, C, _, C, _, _),
-        ),
-    ),
-    # Webkid -- red & blue suit (Spider-Man colors).
-    "webkid": (
-        (
-            (_, R, R, R, _, _),
-            (R, W, R, W, R, _),
-            (_, R, B, R, _, _),
-            (B, B, R, B, B, _),
-            (R, _, _, _, R, _),
-        ),
-        (
-            (_, R, R, R, _, _),
-            (R, W, R, W, R, _),
-            (_, R, B, R, _, _),
-            (B, B, R, B, B, _),
-            (_, R, _, R, _, _),
+            (_, _, O, O, _, _),
+            (_, O, W, O, O, _),
+            (O, O, K, O, O, O),
+            (_, O, O, O, O, _),
+            (_, _, _, O, _, _),
         ),
     ),
 }
 FLYER_ORDER: Tuple[str, ...] = (
-    "plumber", "chomp", "helper", "spark", "digger",
-    "dasher", "pup", "bubbly", "frost", "webkid",
+    "hawk", "soccer", "cardinal", "dolphin", "fox",
+    "jet", "monarch", "baseball", "sailboat", "goldfish",
 )
 
 # Pixels of horizontal / vertical room reserved around each sprite so a
@@ -645,7 +658,7 @@ def draw_wreckage(draw, box_x: int, box_w: int, height: int,
 
 def blit_flyer(draw, x: int, y: int, flyer_id: str, scale: int = 2,
                frame: int = 0) -> Tuple[int, int]:
-    """Paint a bee/UFO flyer; returns (width, height)."""
+    """Paint a flyer sprite; returns (width, height)."""
     frames = FLYERS.get(flyer_id)
     if not frames:
         return 0, 0
@@ -678,13 +691,12 @@ def flyer_size(flyer_id: str, scale: int = 2) -> Tuple[int, int]:
 
 def apply_flyer(img, t: float, interval: float = 10.0,
                 flight: float = 2.8) -> Optional[str]:
-    """Animals / objects fly across with depth (closer / further).
+    """Realistic shaded subjects fly across with depth.
 
     Every ``interval`` seconds something appears for ~``flight`` seconds.
-    Scale follows a hump: small (far) → big (close, mid-screen) → small
-    (far again), so it feels like it is flying past the kids in 3D, not
-    sliding flat across the glass. Returns the flyer id while active,
-    or None while idle.
+    Scale follows a hump so it feels closer mid-screen. Base art is larger
+    and scale is capped so pixels stay detailed instead of chunky.
+    Returns the flyer id while active, or None while idle.
     """
     try:
         from PIL import ImageDraw as _ID
@@ -705,15 +717,15 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     draw = _ID.Draw(img)
     frame = int(local * 10) % 2
 
-    # Depth: sin hump -- farthest at the edges, closest in the middle.
-    # Alternate cycles reverse the feel (start close / end far) by using
-    # a mirrored curve every other appearance.
+    # Depth hump; odd cycles recede.
     depth = math.sin(progress * math.pi)  # 0..1..0
     if cycle_i % 2 == 1:
-        # Receding-first: start closer, shrink as it leaves.
         depth = 0.35 + 0.65 * (1.0 - progress)
         depth = max(0.15, min(1.0, depth))
-    max_scale = max(3, (h - 2) // 5)
+
+    # Prefer detail: cap scale from sprite height so ~18-26px tall max.
+    base_h = max(1, flyer_size(flyer_id, scale=1)[1])
+    max_scale = max(2, min(3, (h - 4) // base_h))
     min_scale = 1
     scale = max(min_scale,
                 min_scale + int(round(depth * (max_scale - min_scale))))
@@ -729,15 +741,15 @@ def apply_flyer(img, t: float, interval: float = 10.0,
     else:
         x = int(w - progress * travel)
 
-    bob = int(round(math.sin(progress * math.pi * 4) * (1 + scale // 2)))
-    if flyer_id in ("plumber", "helper", "webkid"):
-        bob = int(round(math.sin(progress * math.pi * 6) * (1 + scale // 2))) + 1
-    elif flyer_id in ("dasher", "spark"):
-        bob = int(round(math.sin(progress * math.pi * 8) * (2 + scale // 2)))
-    elif flyer_id in ("frost", "bubbly"):
-        bob -= 1
-    elif flyer_id == "chomp":
+    bob = int(round(math.sin(progress * math.pi * 3) * (1 + scale // 2)))
+    if flyer_id in ("hawk", "monarch", "jet"):
         bob = int(round(math.sin(progress * math.pi * 5) * (1 + scale // 2)))
+    elif flyer_id in ("dolphin", "sailboat", "goldfish"):
+        bob = int(round(math.sin(progress * math.pi * 2) * scale)) - 1
+    elif flyer_id in ("soccer", "baseball"):
+        bob = int(round(math.sin(progress * math.pi * 6) * scale))
+    elif flyer_id == "fox":
+        bob = int(round(abs(math.sin(progress * math.pi * 8)) * scale))
     y = max(0, min(h - fh, (h - fh) // 2 + bob))
     blit_flyer(draw, x, y, flyer_id, scale=scale, frame=frame)
     return flyer_id
