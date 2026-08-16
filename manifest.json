@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.60.2",
+  "version": "0.61.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.61.0",
+      "released": "2026-08-16",
+      "notes": "Kid-friendly mode: outdoor tips (Jacket/Umbrella/Nice Day), simpler football (Ball / 3rd Down / Near Goal!) and soccer (67 Min), Win! cheer after a followed team's final, plainer Top Players / Trophy Race titles. Config: slower scroll, fewer other-live, HR/Hits/SB boards."
+    },
     {
       "version": "0.60.2",
       "released": "2026-08-16",

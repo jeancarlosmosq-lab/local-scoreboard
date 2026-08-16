@@ -4640,6 +4640,43 @@ def main():
     assert got["hourly"][0]["temp"] == 22, got["hourly"]
     print("PASS  weather forecast/hourly temps convert when units=C")
 
+    # Kid-friendly weather tips, football jargon, and win cheer.
+    assert StripRenderer.weather_kid_tip(
+        {"now_temp": 40, "units": "F", "now_condition": "Clear"}) == "Jacket!"
+    assert StripRenderer.weather_kid_tip(
+        {"now_temp": 70, "units": "F", "now_condition": "Rain"}) == "Umbrella!"
+    assert StripRenderer.weather_kid_tip(
+        {"now_temp": 72, "units": "F", "now_condition": "Sunny"}) == "Nice Day!"
+    rkid = StripRenderer(FakeDisplay(192, 32), {"kid_friendly": True}, log)
+    assert rkid.kid_friendly
+    kimg = Image.new("RGB", (200, 32), (0, 0, 0))
+    from PIL import ImageDraw as _KidID
+    kdraw = _TextSpyDraw(_KidID.Draw(kimg))
+    kfont, krow = rkid._fit_font(kdraw, 3, 32)
+    nfl_kid = {
+        "id": "k1", "league": "nfl", "state": STATE_LIVE,
+        "home": {"abbr": "NYG", "score": "14"},
+        "away": {"abbr": "DAL", "score": "10"},
+        "situation": {"kind": "football", "down_distance": "3rd & 7",
+                      "yard_line": "DAL 40", "possession": "NYG",
+                      "red_zone": False, "clock": "5:00"},
+        "leaders": [],
+    }
+    rkid._draw_live_detail(kimg, kdraw, 2, nfl_kid, kfont, krow)
+    joined = " ".join(str(t) for t in kdraw.texts)
+    assert "NYG Ball" in joined and "3rd Down" in joined, joined
+    assert "DAL 40" not in joined and "3rd & 7" not in joined, joined
+    win_game = {
+        "id": "w1", "league": "mlb", "state": STATE_FINAL, "start": "",
+        "home": {"abbr": "NYY", "name": "Yankees", "score": "5", "winner": True},
+        "away": {"abbr": "BOS", "name": "Red Sox", "score": "3", "winner": False},
+        "situation": {}, "leaders": [],
+    }
+    assert StripRenderer._followed_side_won(win_game, "NYY")["abbr"] == "NYY"
+    cheer_w = rkid._draw_win_cheer(kimg, kdraw, 2, "Yankees", kfont, krow)
+    assert cheer_w > 10 and any("Win!" in str(t) for t in kdraw.texts)
+    print("PASS  kid-friendly weather tips, football simplify, win cheer")
+
     # Daily condensation: daytime highs only, Title Case labels, unit convert.
     wx_daily = NWSWeather(log, 40.66, -74.11, units="C")
     condensed = wx_daily._condense_daily([

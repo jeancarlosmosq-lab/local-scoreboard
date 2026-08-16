@@ -196,6 +196,7 @@ class StripRenderer:
         self.config = config or {}
         self.logger = logger
         self.logo_manager = logo_manager
+        self.kid_friendly = bool(self.config.get("kid_friendly", False))
         # Off by default -- every existing caller (all of test_offline.py
         # included) gets the original thread-based background build
         # unchanged. manager.py opts the real, on-device renderer in;
@@ -680,6 +681,8 @@ class StripRenderer:
         x += self._draw_trophy(draw, x, top, size) + 6
 
         title, subtitle = "MLB", "Awards Watch"
+        if self.kid_friendly:
+            subtitle = "Trophy Race"
         text_top = self._text_top(draw, font, self._vblock_start(row_h, 2))
         draw.text((x, text_top), self._safe(title), font=font, fill=self.UPCOMING)
         draw.text((x, text_top + row_h), self._safe(subtitle), font=font,
@@ -788,42 +791,67 @@ class StripRenderer:
             # to be drawn at the cursor *after* the down text without
             # advancing the returned width for it -- confirmed on the Pi
             # during DAL@SEA other-live: returned width undercounted by
-            # ~30px, so the next strip segment painted straight through
-            # "SEA 35". Width is the wider of the two rows, like the
-            # baseball branch above.
+            # ~30px, so the next strip segment painted through "SEA 35".
+            # Width is the wider of the two rows, like baseball above.
+            #
+            # Kid-friendly mode drops yard-line jargon ("SEA 35", "3rd & 7")
+            # for "DAL Ball" / "3rd Down" / "Near Goal!" -- enough for a
+            # child to know who has it and whether it is exciting.
             down = situation.get("down_distance") or ""
             spot = situation.get("yard_line") or ""
             possession = situation.get("possession") or ""
             col = x
             row1 = col
-            if possession:
-                # A ball marker beside the team with possession is the
-                # quickest read on a football board. Plain "*", not the
-                # Unicode "\u25cf" circle this drew before -- real BDF
-                # fonts can't encode that at all (confirmed on the Pi:
-                # UnicodeEncodeError, a live-game crash the moment a
-                # followed team's opponent had the ball), and _safe()
-                # stripping it silently would have fixed the crash but
-                # also silently dropped the marker itself, with nothing
-                # left indicating who has the ball. "*" survives _safe()
-                # (it's already ASCII) and still reads as a marker.
-                possession_text = self._safe(f"{possession} *")
-                draw.text((row1, top), possession_text, font=font,
-                          fill=self.LIVE if not situation.get("red_zone")
-                          else (255, 80, 60))
-                row1 += self._measure(draw, possession_text, font)[0] + 5
-            if down:
-                draw.text((row1, top), self._safe(down), font=font,
-                          fill=self.LABEL)
-                row1 += self._measure(draw, down, font)[0] + 4
-            row2 = col
-            if spot:
-                spot_text = self._safe(spot)
-                draw.text((col, top + row_h + 1), spot_text, font=font,
-                          fill=self.DIM)
-                row2 += self._measure(draw, spot_text, font)[0]
-            if row1 > col or row2 > col:
-                x = max(row1, row2) + 6
+            if self.kid_friendly:
+                if possession:
+                    possession_text = self._safe(f"{possession} Ball")
+                    draw.text((row1, top), possession_text, font=font,
+                              fill=self.LIVE if not situation.get("red_zone")
+                              else (255, 80, 60))
+                    row1 += self._measure(draw, possession_text, font)[0] + 5
+                row2 = col
+                if situation.get("red_zone"):
+                    spot_text = "Near Goal!"
+                elif down:
+                    # "3rd & 7" / "1st & 10" -> "3rd Down"
+                    spot_text = f"{down.split()[0]} Down" if down.split() else down
+                else:
+                    spot_text = ""
+                if spot_text:
+                    draw.text((col, top + row_h + 1), self._safe(spot_text),
+                              font=font, fill=self.DIM)
+                    row2 += self._measure(draw, spot_text, font)[0]
+                if row1 > col or row2 > col:
+                    x = max(row1, row2) + 6
+            else:
+                if possession:
+                    # A ball marker beside the team with possession is the
+                    # quickest read on a football board. Plain "*", not the
+                    # Unicode "\u25cf" circle this drew before -- real BDF
+                    # fonts can't encode that at all (confirmed on the Pi:
+                    # UnicodeEncodeError, a live-game crash the moment a
+                    # followed team's opponent had the ball), and _safe()
+                    # stripping it silently would have fixed the crash but
+                    # also silently dropped the marker itself, with nothing
+                    # left indicating who has the ball. "*" survives _safe()
+                    # (it's already ASCII) and still reads as a marker.
+                    possession_text = self._safe(f"{possession} *")
+                    draw.text((row1, top), possession_text, font=font,
+                              fill=self.LIVE if not situation.get("red_zone")
+                              else (255, 80, 60))
+                    row1 += self._measure(draw, possession_text, font)[0] + 5
+                if down:
+                    draw.text((row1, top), self._safe(down), font=font,
+                              fill=self.LABEL)
+                    row1 += self._measure(draw, down, font)[0] + 4
+                row2 = col
+                if spot:
+                    spot_text = self._safe(spot)
+                    draw.text((col, top + row_h + 1), spot_text, font=font,
+                              fill=self.DIM)
+                    row2 += self._measure(draw, spot_text, font)[0]
+                if row1 > col or row2 > col:
+                    x = max(row1, row2) + 6
 
         elif kind == "soccer":
             # Minute beside the crests. Status often already carries "67'",
@@ -831,7 +859,12 @@ class StripRenderer:
             # same explicit live-detail slot football/baseball use.
             clock = situation.get("clock") or game.get("clock") or ""
             if clock:
-                text = self._safe(clock)
+                if self.kid_friendly:
+                    # "67'" -> "67 Min" -- clearer than the prime mark.
+                    minute = clock.rstrip("'").strip()
+                    text = self._safe(f"{minute} Min" if minute else clock)
+                else:
+                    text = self._safe(clock)
                 draw.text((x, top), text, font=font, fill=self.LIVE)
                 x += self._measure(draw, text, font)[0] + 6
 
@@ -1000,6 +1033,15 @@ class StripRenderer:
                 performer.get("full_name", ""), performer.get("name", ""),
                 performer.get("line", ""), font, row_h,
             )
+
+        if self.kid_friendly and state == "final":
+            winner = self._followed_side_won(game, focus_abbr)
+            if winner:
+                cheer_name = winner.get("name") or winner.get("abbr") or ""
+                if cheer_name:
+                    x += self._draw_divider(img, draw, x)
+                    x += self._draw_win_cheer(
+                        img, draw, x, cheer_name, font, row_h)
 
         return x - start
 
@@ -1179,6 +1221,43 @@ class StripRenderer:
             return "clear"
         return "cloud"
 
+    @staticmethod
+    def weather_kid_tip(weather: Dict) -> str:
+        """A short outdoor tip a child can act on -- jacket, umbrella, etc.
+
+        Prefer rain/snow over temperature when both apply. Empty string when
+        nothing useful to say (mild and dry).
+        """
+        if not weather:
+            return ""
+        condition = (
+            weather.get("now_condition") or weather.get("condition") or ""
+        )
+        kind = StripRenderer.condition_kind(condition)
+        temp = weather.get("now_temp")
+        if temp is None:
+            temp = weather.get("temp")
+        try:
+            temp_f = float(temp) if temp is not None else None
+        except (TypeError, ValueError):
+            temp_f = None
+        if temp_f is not None and (weather.get("units") or "F").upper() == "C":
+            temp_f = temp_f * 9.0 / 5.0 + 32.0
+
+        if kind == "storm":
+            return "Stay In!"
+        if kind == "rain":
+            return "Umbrella!"
+        if kind == "snow":
+            return "Bundle Up!"
+        if temp_f is not None and temp_f <= 45:
+            return "Jacket!"
+        if temp_f is not None and temp_f >= 88:
+            return "Hot Out!"
+        if kind == "clear" and temp_f is not None and 60 <= temp_f <= 80:
+            return "Nice Day!"
+        return ""
+
     def _draw_weather_icon(self, draw, x: int, y: int, size: int,
                            kind: str) -> int:
         """A weather symbol drawn from primitives.
@@ -1353,11 +1432,21 @@ class StripRenderer:
         if now_temp is None:
             now_temp = weather.get("temp")
         feels = weather.get("now_feels")
-        show_feels = feels is not None and now_temp is not None and feels != now_temp
+        kid_tip = self.weather_kid_tip(weather) if self.kid_friendly else ""
+        # Kid tip takes the second row when present -- "Jacket!" is more
+        # useful to a child than "Feels Like 71F". Feels-like stays for
+        # the adult board.
+        show_feels = (
+            not kid_tip
+            and feels is not None
+            and now_temp is not None
+            and feels != now_temp
+        )
+        show_tip = bool(kid_tip)
 
         if show_current:
-            text_rows = 2 if show_feels else 1
-        elif feels is not None:
+            text_rows = 2 if (show_feels or show_tip) else 1
+        elif show_tip or feels is not None:
             text_rows = 1
         else:
             text_rows = 0
@@ -1398,7 +1487,12 @@ class StripRenderer:
                 draw.text((cursor, self._text_top(draw, font, text_top)),
                           self._safe(big), font=font, fill=self.VALUE)
                 width = self._measure(draw, big, font)[0]
-                if show_feels:
+                if show_tip:
+                    draw.text((cursor, self._text_top(draw, font, text_top + row_h,
+                                                       sample=kid_tip)),
+                              self._safe(kid_tip), font=font, fill=self.UPCOMING)
+                    width = max(width, self._measure(draw, kid_tip, font)[0])
+                elif show_feels:
                     # Written out in full -- this is a scrolling strip, not
                     # a fixed-width panel, so there is no space pressure
                     # forcing an abbreviation that a viewer has to decode.
@@ -1408,6 +1502,11 @@ class StripRenderer:
                               self._safe(text), font=font, fill=self.DIM)
                     width = max(width, self._measure(draw, text, font)[0])
                 cursor += width + 6
+            elif not show_current and show_tip:
+                draw.text((cursor, self._text_top(draw, font, text_top,
+                                                   sample=kid_tip)),
+                          self._safe(kid_tip), font=font, fill=self.UPCOMING)
+                cursor += self._measure(draw, kid_tip, font)[0] + 6
             elif not show_current and feels is not None:
                 text = f"Feels Like {feels}{unit}"
                 draw.text((cursor, self._text_top(draw, font, text_top, sample=text)),
@@ -1726,6 +1825,36 @@ class StripRenderer:
         w2 = self._measure(draw, label, font)[0]
         return (x + max(w1, w2) + 6) - start
 
+    def _draw_win_cheer(self, img, draw, x: int, name: str,
+                        font, row_h: int) -> int:
+        """A short celebration after a followed team's win -- for kids.
+
+        Two rows: "Yankees" over "Win!" in the rivalry/gold colour so it
+        reads as a moment, not another score line.
+        """
+        start = x
+        team = self._safe(name or "We")
+        top_line, bottom = team, "Win!"
+        start_row = self._vblock_start(row_h, 2)
+        top = self._text_top(draw, font, start_row, sample=top_line)
+        colour = self.RIVALRY
+        draw.text((x, top), top_line, font=font, fill=colour)
+        w1 = self._measure(draw, top_line, font)[0]
+        draw.text((x, top + row_h), bottom, font=font, fill=self.VALUE)
+        w2 = self._measure(draw, bottom, font)[0]
+        return (x + max(w1, w2) + 6) - start
+
+    @staticmethod
+    def _followed_side_won(game: Dict, focus_abbr: str) -> Optional[Dict]:
+        """The followed side's competitor dict if they won this final."""
+        if not focus_abbr or game.get("state") != "final":
+            return None
+        wanted = abbr_group(focus_abbr)
+        for side in (game.get("home") or {}, game.get("away") or {}):
+            if side.get("abbr", "").upper() in wanted and side.get("winner"):
+                return side
+        return None
+
     def _draw_note(self, img, draw, x: int, name: str, short_name: str,
                    body: str, font, row_h: int) -> int:
         """A performer: name above, stat line below.
@@ -1939,8 +2068,10 @@ class StripRenderer:
         Rebuilding several hundred pixels of image every frame would be
         ruinous on a Pi that is also driving the matrix.
         """
+        self.kid_friendly = bool(self.config.get("kid_friendly", False))
         signature = (
             self.width, self.height,
+            bool(self.kid_friendly),
             int(rivalry_live_boost or 0),
             tuple(
                 (entry[0], tuple((r.get("rank"), r.get("short_name"), r.get("value"))
@@ -2379,8 +2510,9 @@ class StripRenderer:
         # leaderboards would otherwise announce statistics and then show none.
         drawable = [entry for entry in (leaderboards or []) if entry[1]]
         if drawable:
+            leaders_sub = "Top Players" if self.kid_friendly else "Season Leaders"
             x += self._draw_section(scratch, draw, x, "mlb", "MLB",
-                                    "Season Leaders", font, row_h)
+                                    leaders_sub, font, row_h)
             x += self._draw_divider(scratch, draw, x)
 
         for entry in drawable:

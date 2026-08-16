@@ -269,6 +269,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self.teams_rivalry_scroll_factor = max(
             0.3, min(1.0, float(self.config.get("rivalry_scroll_factor", 0.7)))
         )
+        self.teams_kid_friendly = bool(self.config.get("kid_friendly", False))
 
         # League leaders ride on the same strip, so the board shows scores and
         # leaderboards in one scroll rather than handing between two plugins.
@@ -370,6 +371,7 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
         self.teams_scroll_speed = 22.0
         self.teams_rivalry_live_boost = 0
         self.teams_rivalry_scroll_factor = 1.0
+        self.teams_kid_friendly = False
         self.teams_leaderboards_on = False
         self.teams_leader_categories = []
         self.teams_leader_scopes = []
@@ -721,7 +723,8 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
 
         now = time.time()
         if (self._boards_cache is not None
-                and now - self._boards_built < self._boards_interval):
+                and now - self._boards_built < self._boards_interval
+                and getattr(self, "_boards_kid_mode", None) is self.teams_kid_friendly):
             return self._boards_cache
 
         # AL and NL still get their own mark leading the list (confirmed
@@ -738,9 +741,26 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                     continue
                 stat = ALL_CATEGORIES.get(category, {}).get(
                     "label", category.upper())
-                title = f"{label} {stat} Leaders".strip()
+                if self.teams_kid_friendly:
+                    # Full words kids can read: "AL Home Runs", not "AL HR Leaders".
+                    kid_stat = {
+                        "homeRuns": "Home Runs",
+                        "hits": "Hits",
+                        "stolenBases": "Stolen Bases",
+                        "runsBattedIn": "RBIs",
+                        "runs": "Runs",
+                        "battingAverage": "Batting Avg",
+                        "earnedRunAverage": "ERA",
+                        "wins": "Wins",
+                        "strikeouts": "Strikeouts",
+                    }.get(category, stat)
+                    title = f"{label} {kid_stat}".strip()
+                    header = kid_stat
+                else:
+                    title = f"{label} {stat} Leaders".strip()
+                    header = stat
                 boards.append((
-                    title, rows[: self.teams_leader_depth], stat, scope,
+                    title, rows[: self.teams_leader_depth], header, scope,
                 ))
 
         if self.awards is not None:
@@ -764,11 +784,20 @@ class LocalScoreboardPlugin(BasePlugin if BasePlugin else object):
                         "short_name": c.get("short_name") or c.get("name"),
                         "team": c.get("team", ""),
                     } for c in candidates[: self.teams_leader_depth]]
-                    title = f"{label} {definition.get('label', key)}".strip()
+                    award_label = definition.get("label", key)
+                    if self.teams_kid_friendly:
+                        award_label = {
+                            "mvp": "MVP Race",
+                            "cy_young": "Best Pitcher",
+                            "roy": "Rookie Race",
+                            "triple_crown": "Triple Crown",
+                        }.get(key, award_label)
+                    title = f"{label} {award_label}".strip()
                     awards.append((title, rows, scope))
 
         self._boards_cache = (boards, awards)
         self._boards_built = now
+        self._boards_kid_mode = self.teams_kid_friendly
         titles = [entry[0] for entry in boards + awards]
         if titles != self._boards_titles:
             self._boards_titles = titles

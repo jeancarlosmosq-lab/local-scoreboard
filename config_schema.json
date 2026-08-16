@@ -59,6 +59,12 @@
         }
       }
     },
+    "kid_friendly": {
+      "type": "boolean",
+      "title": "Kid-Friendly Mode",
+      "description": "Weather tips kids can use (Jacket / Umbrella), simpler football and soccer wording, a short Win! cheer after a followed team's final, and plainer leaderboard and trophy-race titles. Aimed at a family board kids actually read.",
+      "default": false
+    },
     "other_live_games": {
       "type": "object",
       "title": "Other Live Games",
