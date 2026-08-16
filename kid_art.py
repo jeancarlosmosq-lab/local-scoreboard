@@ -251,7 +251,7 @@ CHEERS: Dict[str, str] = {
     "kitty": "Pounce!",
     "star": "Crash!",
     "ball": "Wham!",
-    "comet": "Blast!",
+    "comet": "Kapow!",
     "fish": "Chomp!",
 }
 
