@@ -9,11 +9,12 @@ The lookup is two-stage: a point resolves to a forecast office and grid
 square, and that grid is what actually serves forecasts. The first step never
 changes for a fixed location, so it is resolved once and kept.
 
-Three things are fetched, in descending order of how fast they change:
+Four things are fetched, in descending order of how fast they change:
 
     alerts       warnings and watches -- the reason to look at all
     current      temperature and conditions now
-    forecast     today's high and low, and tonight
+    hourly       the next few hours
+    daily        daytime highs for the next few days
 
 Alerts matter most. A severe thunderstorm warning for Hudson County is worth
 interrupting a scoreboard for; the temperature is not.
@@ -155,12 +156,40 @@ class NWSWeather:
                     nxt.get("temperature"), nxt_unit, self.units)
                 out["next_condition"] = (nxt.get("shortForecast") or "").upper()
 
+        # Daytime highs for the multi-day row on the strip. Built from the
+        # same daily-forecast periods already fetched for "now"/"tonight".
+        out["daily"] = self._condense_daily(periods)
         out["hourly"] = self._fetch_hourly(grid)
 
         current = self._fetch_current(grid)
         if current:
             out.update(current)
 
+        return out
+
+    def _condense_daily(self, periods, days: int = 5) -> List[Dict]:
+        """Daytime periods only, as a multi-day outlook.
+
+        NWS alternates day and night periods, so taking the first N
+        outright would give half-days. Only the daytime ones carry the
+        high, which is what a 4-day forecast means to a reader. Labels
+        are three-letter Title Case ("Mon") to match the strip's casing.
+        """
+        out = []
+        for period in periods:
+            if not period.get("isDaytime"):
+                continue
+            raw = (period.get("name") or "")[:3]
+            name = (raw[:1].upper() + raw[1:].lower()) if raw else ""
+            src_unit = period.get("temperatureUnit", "F")
+            out.append({
+                "name": name,
+                "temp": self._convert_temp(
+                    period.get("temperature"), src_unit, self.units),
+                "condition": (period.get("shortForecast") or ""),
+            })
+            if len(out) >= days:
+                break
         return out
 
     def _fetch_hourly(self, grid: Dict, hours: int = 5):

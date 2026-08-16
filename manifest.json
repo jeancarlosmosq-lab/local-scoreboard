@@ -1,7 +1,7 @@
 {
   "id": "local-scoreboard",
   "name": "Local Scoreboard",
-  "version": "0.58.1",
+  "version": "0.59.0",
   "author": "jeancarlosmosq-lab",
   "description": "Live scores for followed teams, other live games around the league, weather, a clock, moon phase, personal countdowns and MLB leaderboards, all on one continuous scrolling strip -- fully configurable to any city, teams and leagues",
   "category": "sports",
@@ -22,6 +22,11 @@
   "repo": "https://github.com/jeancarlosmosq-lab/local-scoreboard",
   "branch": "main",
   "versions": [
+    {
+      "version": "0.59.0",
+      "released": "2026-08-16",
+      "notes": "Restore the 4 Day Forecast row on the strip (daytime highs from NWS). Removed during the 0.58.0 density pass by mistake relative to how the board is used; hourly + moon still hide when hide_forecast_when_live is on, but the 4-day row stays up with current conditions."
+    },
     {
       "version": "0.58.1",
       "released": "2026-08-16",

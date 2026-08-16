@@ -2946,18 +2946,17 @@ def main():
           f"and temperature (gap_above={gap_above}px, "
           f"gap_below={gap_below}px), not pinned to one side of it")
 
-    # The forecast row (Next Hours -- the only one left; the 4-day forecast
-    # was removed entirely) must be centred under its own header when the
-    # header is wider than the columns, not left flush with it -- a header
-    # wider than one short column used to leave all the slack on the
-    # right, the same slack-dumped-on-one-side mistake this file already
-    # fixes vertically everywhere else. When the columns are wider than
-    # the header instead, they stay flush-left, since there is no slack to
-    # split. Checked by spying on both _draw_forecast_row's own starting
-    # x (the header's position, whatever preceded it in the weather
-    # block) and the x each real _draw_forecast_column call receives, so
-    # the comparison is against where the header actually is rather than
-    # an assumption about it.
+    # The forecast row (Next Hours / 4 Day Forecast) must be centred under
+    # its own header when the header is wider than the columns, not left
+    # flush with it -- a header wider than one short column used to leave
+    # all the slack on the right, the same slack-dumped-on-one-side mistake
+    # this file already fixes vertically everywhere else. When the columns
+    # are wider than the header instead, they stay flush-left, since there
+    # is no slack to split. Checked by spying on both _draw_forecast_row's
+    # own starting x (the header's position, whatever preceded it in the
+    # weather block) and the x each real _draw_forecast_column call
+    # receives, so the comparison is against where the header actually is
+    # rather than an assumption about it.
     from PIL import ImageDraw as _CenterID
     rcenter = StripRenderer(FakeDisplay(192, 32), {}, log)
     row_start_calls = []
@@ -3023,7 +3022,7 @@ def main():
     # used above. In the sandbox font these columns are reliably wider
     # than their own header, so the row should sit flush-left with no
     # shift. On real BDF fonts that isn't guaranteed, the same way it
-    # wasn't for the 4-day forecast before it was removed -- a 1-2px
+    # wasn't for the 4-day forecast either -- a 1-2px
     # centering nudge either way is harmless on screen, so the assertion
     # checks the row obeys that same formula (whichever side is wider),
     # not a specific hardcoded outcome that only held for one font.
@@ -3326,19 +3325,23 @@ def main():
 
     # show_forecast=False (weather.hide_forecast_when_live, opted into per
     # install) drops the hourly column and the moon phase, but current
-    # conditions must still draw -- the same reasoning that already keeps
-    # a weather warning up during a live game.
-    forecast_weather = dict(moon_weather, hourly=[{"name": "8P", "temp": 77}])
+    # conditions and the 4-day forecast must still draw -- the same
+    # reasoning that already keeps a weather warning up during a live game.
+    forecast_weather = dict(moon_weather, hourly=[{"name": "8P", "temp": 77}],
+                            daily=[{"name": "Mon", "temp": 82, "condition": "Sunny"},
+                                   {"name": "Tue", "temp": 79, "condition": "Cloudy"},
+                                   {"name": "Wed", "temp": 75, "condition": "Rain"},
+                                   {"name": "Thu", "temp": 78, "condition": "Clear"}])
     # 2pm, deliberately inside the hourly-forecast's own 6am-8pm daytime
     # window (tested separately below) so this test is only about
     # show_forecast, not confounded by that other cutoff.
-    shown_img = Image.new("RGB", (250, 32), (0, 0, 0))
+    shown_img = Image.new("RGB", (400, 32), (0, 0, 0))
     shown_draw = _MoonID.Draw(shown_img)
     shown_w = rmoonw._draw_weather(
         shown_img, shown_draw, 2, forecast_weather, moon_font, moon_row_h,
         _dt(2026, 8, 12, 14, 0), show_forecast=True)
 
-    hidden_img = Image.new("RGB", (250, 32), (0, 0, 0))
+    hidden_img = Image.new("RGB", (400, 32), (0, 0, 0))
     hidden_draw = _MoonID.Draw(hidden_img)
     hidden_w = rmoonw._draw_weather(
         hidden_img, hidden_draw, 2, forecast_weather, moon_font, moon_row_h,
@@ -3350,9 +3353,20 @@ def main():
     assert hidden_w > 0, (
         "current conditions should still draw with show_forecast=False"
     )
+    # With daily present, hide must still leave the 4-day row -- wider than
+    # current-conditions alone would be.
+    no_daily = dict(moon_weather)
+    bare_img = Image.new("RGB", (400, 32), (0, 0, 0))
+    bare_w = rmoonw._draw_weather(
+        bare_img, _MoonID.Draw(bare_img), 2, no_daily, moon_font, moon_row_h,
+        _dt(2026, 8, 12, 14, 0), show_forecast=False)
+    assert hidden_w > bare_w, (
+        f"4-day forecast must stay up when show_forecast=False: "
+        f"with daily={hidden_w}px, without={bare_w}px"
+    )
     print(f"PASS  show_forecast=False hides the hourly forecast and moon "
-          f"phase but keeps current conditions up "
-          f"({shown_w}px -> {hidden_w}px)")
+          f"phase but keeps current conditions and 4-day forecast up "
+          f"({shown_w}px -> {hidden_w}px; bare current={bare_w}px)")
 
     # show_current=False hides the icon and plain current-temperature
     # number -- whatever the static panel is already showing, nothing
@@ -4619,6 +4633,21 @@ def main():
     assert got["next_temp"] == 15, got
     assert got["hourly"][0]["temp"] == 22, got["hourly"]
     print("PASS  weather forecast/hourly temps convert when units=C")
+
+    # Daily condensation: daytime highs only, Title Case labels, unit convert.
+    wx_daily = NWSWeather(log, 40.66, -74.11, units="C")
+    condensed = wx_daily._condense_daily([
+        {"isDaytime": True, "name": "Monday", "temperature": 77,
+         "temperatureUnit": "F", "shortForecast": "Sunny"},
+        {"isDaytime": False, "name": "Monday Night", "temperature": 59,
+         "temperatureUnit": "F", "shortForecast": "Clear"},
+        {"isDaytime": True, "name": "Tuesday", "temperature": 80,
+         "temperatureUnit": "F", "shortForecast": "Cloudy"},
+    ], days=4)
+    assert len(condensed) == 2, condensed
+    assert condensed[0]["name"] == "Mon" and condensed[0]["temp"] == 25, condensed
+    assert condensed[1]["name"] == "Tue" and condensed[1]["temp"] == 27, condensed
+    print("PASS  daily forecast condenses daytime highs with unit convert")
 
     # Partial league fetch failure must not wipe other leagues' good data.
     gpartial = GamesManager(log, teams=[

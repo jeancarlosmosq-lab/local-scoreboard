@@ -1290,7 +1290,8 @@ class StripRenderer:
         A severe thunderstorm warning is the only thing on this board more
         urgent than a live score.
 
-        show_forecast controls the hourly columns and the moon phase only
+        show_forecast controls the hourly columns and the moon phase only;
+        the 4-day forecast row stays up either way (same as current conditions)
         -- current conditions always draw regardless, on the same
         reasoning as the warning above: whatever's happening right now
         outside stays visible even while a live game hides everything
@@ -1423,6 +1424,18 @@ class StripRenderer:
             x += self._draw_divider(img, draw, x)
             x += self._draw_forecast_row(
                 img, draw, x, hourly[:5], "Next Hours", font, row_h, unit,
+                forecast_content_top)
+
+        # --- 4 Day Forecast -----------------------------------------------
+        # Not gated by show_forecast -- unlike the hourly column and the
+        # moon phase, this stays up through a live game too, per the same
+        # "brief enough not to compete" reasoning as current conditions
+        # (and matching weather.hide_forecast_when_live's schema text).
+        daily = [d for d in (weather.get("daily") or []) if d.get("temp") is not None]
+        if daily:
+            x += self._draw_divider(img, draw, x)
+            x += self._draw_forecast_row(
+                img, draw, x, daily[:4], "4 Day Forecast", font, row_h, unit,
                 forecast_content_top)
 
         # --- Moon -----------------------------------------------------------
